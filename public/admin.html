@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ajay Haircut — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --gold:#c6a15b; --ink:#0b0b0d; --panel:#141417; --line:#26262c; --text:#f4f1ea; --muted:#a8a49b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--ink); color:var(--text); padding:24px; }
+  h1 { font-family:'Playfair Display',serif; font-size:25px; letter-spacing:2px; margin-bottom:4px; } h1 span { color:var(--gold); }
+  .sub { color:var(--muted); margin-bottom:22px; font-size:14px; }
+  .box { max-width:420px; margin:70px auto; background:linear-gradient(180deg,#1a1a1f,#141417); padding:32px; border-radius:14px; border:1px solid var(--line); }
+  label { display:block; margin:12px 0 6px; font-size:13px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); }
+  input { width:100%; padding:12px; border-radius:9px; border:1px solid #33333a; background:#0f0f12; color:var(--text); font-size:15px; }
+  input:focus { outline:none; border-color:var(--gold); }
+  .btn { background:linear-gradient(135deg,var(--gold),#a9833f); color:#141005; padding:12px 22px; border-radius:999px; font-weight:700; border:none; cursor:pointer; font-size:15px; margin-top:18px; }
+  .err { color:#e07a7a; margin-top:12px; font-size:14px; }
+  table { width:100%; border-collapse:collapse; background:var(--panel); border-radius:14px; overflow:hidden; border:1px solid var(--line); }
+  th, td { padding:12px; text-align:left; border-bottom:1px solid var(--line); font-size:14px; }
+  th { color:var(--gold); font-size:11.5px; text-transform:uppercase; letter-spacing:1.2px; background:#101013; }
+  tr:hover td { background:#17171c; }
+  .cancel { background:#3a2326; color:#f0a3a3; border:1px solid #5a343a; padding:6px 14px; border-radius:999px; cursor:pointer; font-size:13px; font-weight:600; }
+  .cancel:hover { background:#4a2b30; }
+  .cancelled { color:var(--muted); text-decoration:line-through; }
+  .top { display:flex; justify-content:space-between; align-items:center; max-width:960px; margin:0 auto 6px; }
+  .wrap { max-width:960px; margin:0 auto; }
+  .logout { background:none; border:1px solid #33333a; color:var(--muted); padding:8px 16px; border-radius:999px; cursor:pointer; }
+  .logout:hover { border-color:var(--gold); color:var(--gold); }
+</style>
+</head>
+<body>
+<div id="loginView">
+  <div class="box">
+    <h1>AJAY <span>HAIRCUT</span></h1>
+    <p class="sub">Admin login — bookings dashboard</p>
+    <label for="pw">Password</label>
+    <input type="password" id="pw" autocomplete="current-password">
+    <button class="btn" id="loginBtn" style="width:100%;">Log in</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="dashView" style="display:none;">
+  <div class="top">
+    <div><h1>AJAY <span>HAIRCUT</span> — Bookings</h1><p class="sub" id="countLine"></p></div>
+    <button class="logout" id="logoutBtn">Log out</button>
+  </div>
+  <div class="wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Service</th><th>Phone</th><th>SMS OK</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let token = sessionStorage.getItem('ajayAdminToken') || '';
+
+  async function login() {
+    const pw = document.getElementById('pw').value;
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
+    const data = await r.json();
+    if (!r.ok) { document.getElementById('loginErr').textContent = data.error || 'Login failed.'; return; }
+    token = data.token; sessionStorage.setItem('ajayAdminToken', token);
+    showDash();
+  }
+
+  async function loadBookings() {
+    const r = await fetch('/api/bookings', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401) { logout(); return; }
+    const data = await r.json();
+    const rows = document.getElementById('rows');
+    rows.innerHTML = '';
+    const active = data.bookings.filter(b => b.status !== 'cancelled');
+    document.getElementById('countLine').textContent = active.length + ' upcoming/active bookings';
+    data.bookings.forEach(b => {
+      const tr = document.createElement('tr');
+      if (b.status === 'cancelled') tr.className = 'cancelled';
+      tr.innerHTML = '<td>' + b.date + '</td><td>' + b.time + '</td><td>' + b.name + '</td><td>' + b.service + '</td><td>' + (b.phone || '—') + '</td><td>' + (b.smsConsent ? 'Yes' : 'No') + '</td>';
+      const td = document.createElement('td');
+      if (b.status !== 'cancelled') {
+        const btn = document.createElement('button');
+        btn.className = 'cancel'; btn.textContent = 'Cancel';
+        btn.onclick = async () => {
+          btn.disabled = true; btn.textContent = 'Cancelling…';
+          const res = await fetch('/api/bookings/' + b.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+          if (res.ok) loadBookings();
+          else { btn.disabled = false; btn.textContent = 'Cancel'; alert('Cancel failed — please try again.'); }
+        };
+        td.appendChild(btn);
+      } else td.textContent = 'Cancelled';
+      tr.appendChild(td);
+      rows.appendChild(tr);
+    });
+    if (!data.bookings.length) rows.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">No bookings yet.</td></tr>';
+  }
+
+  function showDash() {
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('dashView').style.display = 'block';
+    loadBookings();
+  }
+  function logout() {
+    token = ''; sessionStorage.removeItem('ajayAdminToken');
+    document.getElementById('dashView').style.display = 'none';
+    document.getElementById('loginView').style.display = 'block';
+  }
+
+  document.getElementById('loginBtn').onclick = login;
+  document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  document.getElementById('logoutBtn').onclick = logout;
+  if (token) showDash();
+</script>
+</body>
+</html>
