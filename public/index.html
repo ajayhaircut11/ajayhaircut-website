@@ -367,6 +367,7 @@
   const slotsEl = document.getElementById('slots');
   const msgEl = document.getElementById('formMsg');
   let selectedTime = null;
+  let loadedDate = null;
 
   const today = new Date();
   dateInput.min = today.toISOString().split('T')[0];
@@ -374,8 +375,13 @@
   dateInput.max = max.toISOString().split('T')[0];
 
   dateInput.addEventListener('change', async () => {
+    const val = dateInput.value;
+    // iPhone's date picker can fire 'change' again when it closes — if the
+    // date is the one already loaded, keep the time the customer picked.
+    if (val && val === loadedDate && slotsEl.querySelector('.slot')) return;
     selectedTime = null; msgEl.textContent = '';
-    const val = dateInput.value; if (!val) return;
+    if (!val) { loadedDate = null; return; }
+    loadedDate = val;
     const d = new Date(val + 'T12:00:00');
     if (d.getDay() === 2) { slotsEl.innerHTML = '<p class="err">We are closed on Tuesdays. Please pick another day.</p>'; return; }
     slotsEl.innerHTML = '<p style="color:var(--muted);font-size:13.5px;">Loading times…</p>';
@@ -395,6 +401,7 @@
   const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 120, 'Beard Perm': 30, "Men's Facial": 45 };
   document.getElementById('bookForm').addEventListener('submit', async (e) => {
     e.preventDefault(); msgEl.textContent = ''; msgEl.className = 'msg';
+    if (!selectedTime) { const sel = document.querySelector('.slot.sel'); if (sel) selectedTime = sel.textContent; }
     if (!selectedTime) { msgEl.textContent = 'Please pick a time.'; msgEl.classList.add('err'); return; }
     const svcChecked = [...document.querySelectorAll('#svcBox input:checked')].map(i => i.value);
     if (!svcChecked.length) { msgEl.textContent = 'Please choose at least one service.'; msgEl.classList.add('err'); return; }
@@ -434,6 +441,8 @@
     document.querySelectorAll('#svcBox input').forEach(i => { i.checked = false; });
     document.getElementById('svcTotal').textContent = '';
     selectedTime = null;
+    loadedDate = null;
+    slotsEl.innerHTML = '<p style="color:var(--muted);font-size:13.5px;">Pick a date first.</p>';
     msgEl.textContent = ''; msgEl.className = 'msg';
     dateInput.dispatchEvent(new Event('change'));
     document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
