@@ -122,7 +122,7 @@ function sendBookingTexts(b, fromDashboard) {
   const when = b.date + ' at ' + b.time;
   if (b.phone) {
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Need to change it? Call (778) 344-2550.');
+      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Surrey, BC. Need to change it? Call (778) 344-2550.');
   }
   if (fromDashboard || !OWNER_PHONE) return;
   sendSms(OWNER_PHONE,
