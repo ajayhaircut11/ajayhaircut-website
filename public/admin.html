@@ -243,6 +243,19 @@
     renderCalendar(); renderDay();
   }
 
+  // Auto-refresh: while the dashboard is open, pull fresh bookings every
+  // 30 seconds (and whenever the page comes back into view), so new online
+  // bookings appear on their own. Skipped while the add/edit form is open
+  // or the dashboard is logged out, so it never disturbs typing.
+  function autoRefresh() {
+    if (document.hidden || !token) return;
+    if (document.getElementById('dashView').style.display === 'none') return;
+    if (overlay.classList.contains('open')) return;
+    loadAll();
+  }
+  setInterval(autoRefresh, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) autoRefresh(); });
+
   function renderCalendar() {
     document.getElementById('monthTitle').textContent = MONTHS[viewM] + ' ' + viewY;
     const grid = document.getElementById('calGrid');
