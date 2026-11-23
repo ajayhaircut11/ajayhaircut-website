@@ -292,11 +292,11 @@
         <div class="slots" id="slots"><p style="color:var(--muted);font-size:13.5px;">Pick a date first.</p></div>
         <div class="step">Step 2 · Your details</div>
         <label for="name">Your name</label>
-        <input type="text" id="name" required placeholder="Full name">
+        <input type="text" id="name" required placeholder="Full name" autocomplete="name">
         <label for="phone">Phone</label>
-        <input type="tel" id="phone" required placeholder="(604) 555-1234">
+        <input type="tel" id="phone" required placeholder="(604) 555-1234" autocomplete="tel">
         <label for="email">Email (for your booking confirmation)</label>
-        <input type="email" id="email" required placeholder="you@example.com">
+        <input type="email" id="email" required placeholder="you@example.com" autocomplete="email">
         <label for="notes">Notes (optional)</label>
         <textarea id="notes" rows="2" placeholder="Anything we should know?"></textarea>
         <p style="color:var(--gold);font-size:14px;font-weight:600;text-align:center;margin:18px 0 16px;">Your booking confirmation will be sent by email.</p>
@@ -417,6 +417,19 @@
 
   const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
   document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); }));
+  // Returning customers: name/phone/email are saved on their own device
+  // after a booking and prefilled next time, so they don't retype them.
+  function prefillCustomer() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ajCustomer') || 'null');
+      if (!saved) return;
+      if (saved.name) document.getElementById('name').value = saved.name;
+      if (saved.phone) document.getElementById('phone').value = saved.phone;
+      if (saved.email) document.getElementById('email').value = saved.email;
+    } catch (e) {}
+  }
+  prefillCustomer();
+
   document.getElementById('bookForm').addEventListener('submit', async (e) => {
     e.preventDefault(); msgEl.textContent = ''; msgEl.className = 'msg';
     if (!selectedTime) { const sel = document.querySelector('.slot.sel'); if (sel) selectedTime = sel.textContent; }
@@ -434,6 +447,7 @@
     const r = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await r.json();
     if (r.ok) {
+      try { localStorage.setItem('ajCustomer', JSON.stringify({ name: payload.name, phone: payload.phone, email: payload.email })); } catch (e) {}
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const first = payload.name.split(' ')[0];
       document.getElementById('thanksTitle').textContent = 'Thanks for booking' + (first ? ', ' + first : '') + '!';
@@ -457,6 +471,7 @@
     document.getElementById('thanksPanel').style.display = 'none';
     const f = document.getElementById('bookForm');
     f.reset(); f.style.display = '';
+    prefillCustomer();
     document.querySelectorAll('#svcBox input').forEach(i => { i.checked = false; });
     selectedTime = null;
     loadedDate = null;
