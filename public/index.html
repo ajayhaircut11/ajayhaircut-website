@@ -122,11 +122,11 @@
   form{padding:44px 36px}
   .step{color:var(--gold);font-size:11px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;margin:22px 0 2px}
   .step:first-child{margin-top:0}
-  label{display:block;margin:14px 0 7px;font-size:13px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
-  input,select{width:100%;padding:14px 15px;border-radius:10px;border:1px solid #33333a;background:#0d0d10;color:var(--text);font-size:15px;font-family:'Inter',sans-serif;transition:.2s}
+  label{display:block;margin:14px 0 7px;font-size:15px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  input,select{width:100%;padding:16px 15px;border-radius:10px;border:1px solid #33333a;background:#0d0d10;color:var(--text);font-size:17px;font-family:'Inter',sans-serif;transition:.2s}
   input:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(198,161,91,.18)}
-  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:6px}
-  .slot{padding:10px 2px;text-align:center;border:1px solid #33333a;border-radius:999px;cursor:pointer;font-size:13px;background:#0d0d10;transition:.15s;font-weight:500}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(102px,1fr));gap:9px;margin-top:6px}
+  .slot{padding:14px 2px;text-align:center;border:1px solid #33333a;border-radius:999px;cursor:pointer;font-size:15.5px;background:#0d0d10;transition:.15s;font-weight:500}
   .slot:hover{border-color:var(--gold);color:var(--gold-2);transform:translateY(-1px)}
   .slot.sel{background:linear-gradient(135deg,var(--gold-2),var(--gold));color:#171106;font-weight:700;border-color:var(--gold)}
   .slot.taken{opacity:.28;pointer-events:none;text-decoration:line-through}
@@ -282,6 +282,7 @@
         <select id="service" required>
           <option value="">Choose a service…</option>
           <option>Men's Haircut</option><option>Skin Fade</option><option>Beard Trim</option>
+          <option>Beard Trim and Threading</option>
           <option>Haircut &amp; Beard</option><option>Styling / Wash</option><option>Hair Perm</option>
           <option>Beard Perm</option><option>Men's Facial</option>
         </select>
