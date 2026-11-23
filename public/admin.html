@@ -156,6 +156,19 @@
   <div class="modal">
     <h3 id="modalTitle">Add booking</h3>
     <label class="blockrow"><input type="checkbox" id="fBlock"><span>Block this time (no customer)</span></label>
+    <div id="blockDurRow" style="display:none;">
+      <label class="flabel" for="fBlockDur">Block duration</label>
+      <select id="fBlockDur">
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="45">45 min</option>
+        <option value="60">1 hour</option>
+        <option value="90">1.5 hours</option>
+        <option value="120">2 hours</option>
+        <option value="180">3 hours</option>
+        <option value="240">4 hours</option>
+      </select>
+    </div>
     <label class="flabel" for="fService">Service</label>
     <select id="fService"></select>
     <label class="flabel" for="fDate">Date</label>
@@ -272,7 +285,8 @@
     const tr = document.createElement('tr');
     if (b.status === 'cancelled') tr.className = 'cancelled';
     if (b.status === 'completed') tr.className = 'completed';
-    const dur = durations[b.service] ? '<div class="tdur">' + durations[b.service] + ' min</div>' : '';
+    const durMin = b.blockedSlot ? (b.blockMinutes || 15) : durations[b.service];
+    const dur = durMin ? '<div class="tdur">' + durMin + ' min</div>' : '';
     const note = b.notes ? '<div class="tnote">' + esc(b.notes) + '</div>' : '';
     const tag = b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : b.status === 'completed' ? '<span class="tag">Completed</span>' : '';
     const nameHtml = b.blockedSlot
@@ -345,7 +359,7 @@
     const takenSet = new Set();
     bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).forEach(b => {
       const start = slotMinutes(b.time);
-      const dur = b.blockedSlot ? 15 : (durations[b.service] || 30);
+      const dur = b.blockedSlot ? (b.blockMinutes || 15) : (durations[b.service] || 30);
       slots.forEach(t => { const m = slotMinutes(t); if (m >= start && m < start + dur) takenSet.add(t); });
     });
     const taken = [...takenSet];
@@ -364,6 +378,7 @@
   function syncBlockUI() {
     const on = document.getElementById('fBlock').checked;
     ['fName', 'fPhone', 'fNotes'].forEach(id => { document.getElementById(id).disabled = on; });
+    document.getElementById('blockDurRow').style.display = on ? '' : 'none';
   }
   function openModal(booking) {
     editingId = booking ? booking.id : null;
@@ -373,6 +388,7 @@
     svc.innerHTML = '';
     services.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s + (durations[s] ? ' · ' + durations[s] + ' min' : ''); svc.appendChild(o); });
     document.getElementById('fBlock').checked = booking ? !!booking.blockedSlot : false;
+    document.getElementById('fBlockDur').value = booking && booking.blockedSlot ? String(booking.blockMinutes || 15) : '30';
     document.getElementById('fName').value = booking && !booking.blockedSlot ? booking.name : '';
     document.getElementById('fPhone').value = booking ? (booking.phone || '') : '';
     document.getElementById('fNotes').value = booking ? (booking.notes || '') : '';
@@ -401,6 +417,7 @@
       date: document.getElementById('fDate').value,
       time: pickedTime,
       blockTime,
+      blockMinutes: blockTime ? parseInt(document.getElementById('fBlockDur').value, 10) : undefined,
     };
     const errEl = document.getElementById('formErr');
     if (!payload.date || !payload.time) { errEl.textContent = 'Please pick a date and a time.'; return; }
