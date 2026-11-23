@@ -18,7 +18,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ajay-admin-2026';
 const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
 const OWNER_EMAIL = process.env.OWNER_EMAIL || 'Popularsalon1@gmail.com';
 async function sendEmail(to, subject, text, html) {
-  if (!BREVO_API_KEY || !to) return;
+  if (!BREVO_API_KEY || !to) return false;
   try {
     const payload = {
       sender: { name: 'Ajay Haircut', email: OWNER_EMAIL },
@@ -31,8 +31,9 @@ async function sendEmail(to, subject, text, html) {
       headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) console.error('Email failed:', res.status, (await res.text()).slice(0, 200));
-  } catch (e) { console.error('Email failed:', e.message); }
+    if (!res.ok) { console.error('Email failed:', res.status, (await res.text()).slice(0, 200)); return false; }
+    return true;
+  } catch (e) { console.error('Email failed:', e.message); return false; }
 }
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -117,8 +118,11 @@ async function sendSms(to, body) {
     return true;
   } catch (e) { console.error('SMS failed:', e.message); return false; }
 }
-function sendBookingTexts(b) {
+function sendBookingTexts(b, authed) {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || b.blockedSlot) return;
+  // Online customers get their confirmation by email only — no text.
+  // Dashboard bookings still text the customer when a number was given.
+  if (!authed) return;
   const when = b.date + ' at ' + b.time;
   if (b.phone) {
     sendSms(normalizePhone(b.phone),
@@ -152,21 +156,45 @@ function shopInstant(dateStr, timeStr) {
   return Date.UTC(y, mo - 1, da, Math.floor(mins / 60), mins % 60) + vancouverOffsetMs(y, mo, da, mins);
 }
 let reminderCheckRunning = false;
+async function sendReminderEmail(b) {
+  if (!b.email) return false;
+  const first = String(b.name || '').trim().split(/\s+/)[0] || 'there';
+  const subject = 'Reminder: ' + b.service + ' — ' + b.date + ' ' + b.time;
+  const text = 'Hi ' + first + ', this is a reminder from Ajay Haircut: your appointment is today at ' + b.time + ' (' + b.service + '). Unit 102, 9385 120 St, Delta, BC. Need to change or cancel? Call (778) 344-2550.';
+  const row = (label, value) => '<div style="padding:7px 0;border-bottom:1px solid #eeeeF1;font-size:15px;"><span style="color:#8a8f9c;">' + label + ':</span> <b style="color:#17171c;">' + esc(value) + '</b></div>';
+  const rows = row('Service', b.service) + row('Date', b.date) + row('Time', b.time);
+  const html = '<div style="margin:0;padding:24px;background:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">'
+    + '<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6e6ea;">'
+    + '<div style="background:#101014;padding:22px 26px;">'
+    + '<div style="color:#c9a227;font-size:11px;font-weight:700;letter-spacing:3px;">APPOINTMENT REMINDER</div>'
+    + '<div style="color:#ffffff;font-size:22px;font-weight:700;margin-top:6px;">See you soon, ' + esc(first) + '</div></div>'
+    + '<div style="padding:20px 26px 24px;">' + rows
+    + '<p style="color:#55555e;font-size:14px;line-height:1.6;margin:16px 0 0;">Unit 102, 9385 120 St, Delta, BC<br>Need to change or cancel? Call <b>(778) 344-2550</b>.</p>'
+    + '</div></div></div>';
+  return sendEmail(b.email, subject, text, html);
+}
+
 async function checkReminders() {
-  if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || reminderCheckRunning) return;
+  if (reminderCheckRunning) return;
   reminderCheckRunning = true;
   try {
     const now = Date.now();
     const bookings = loadBookings();
     let changed = false;
     for (const b of bookings) {
-      if (b.status !== 'booked' || b.blockedSlot || !b.phone || b.reminderSentAt) continue;
+      if (b.status !== 'booked' || b.blockedSlot || b.reminderSentAt) continue;
+      if (!b.phone && !b.email) continue;
       const diff = shopInstant(b.date, b.time) - now;
       if (diff > 0 && diff <= 2 * 60 * 60 * 1000) {
         const first = String(b.name || '').trim().split(/\s+/)[0] || 'there';
         console.log('Sending reminder for booking', b.id, b.date, b.time);
-        const ok = await sendSms(normalizePhone(b.phone),
-          'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Delta, BC. Change/cancel: (778) 344-2550');
+        // Reminders go out on BOTH channels: text and email.
+        let ok = false;
+        if (b.phone && TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
+          ok = (await sendSms(normalizePhone(b.phone),
+            'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Delta, BC. Change/cancel: (778) 344-2550')) || ok;
+        }
+        if (b.email) ok = (await sendReminderEmail(b)) || ok;
         if (ok) { b.reminderSentAt = new Date().toISOString(); changed = true; }
       }
     }
@@ -392,7 +420,7 @@ const server = http.createServer(async (req, res) => {
     bookings.push(booking);
     saveBookings(bookings);
     sendBookingEmails(booking, authed);
-    sendBookingTexts(booking);
+    sendBookingTexts(booking, authed);
     return sendJson(res, 201, { ok: true, booking });
   }
 
