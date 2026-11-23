@@ -178,7 +178,7 @@ async function checkReminders() {
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const SERVICES = [
-  "Men's Haircut", 'Skin Fade', 'Beard Trim', 'Beard Trim and Threading', 'Haircut & Beard',
+  'Haircut & Beard', 'Skin Fade', 'Beard Trim and Threading', "Men's Haircut", 'Beard Trim',
   'Styling / Wash', 'Hair Perm', 'Beard Perm', "Men's Facial", 'Phone / Walk-in',
 ];
 
