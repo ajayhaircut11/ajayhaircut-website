@@ -342,7 +342,13 @@
     pickedTime = null;
     const box = document.getElementById('fChips');
     box.innerHTML = '';
-    const taken = bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).map(b => b.time);
+    const takenSet = new Set();
+    bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).forEach(b => {
+      const start = slotMinutes(b.time);
+      const dur = b.blockedSlot ? 15 : (durations[b.service] || 30);
+      slots.forEach(t => { const m = slotMinutes(t); if (m >= start && m < start + dur) takenSet.add(t); });
+    });
+    const taken = [...takenSet];
     const isToday = dateVal === todayKey();
     const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
     slots.forEach(t => {
