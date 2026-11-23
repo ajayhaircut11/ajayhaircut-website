@@ -180,7 +180,7 @@
 </div>
 
 <script>
-  let token = sessionStorage.getItem('ajayAdminToken') || '';
+  let token = localStorage.getItem('ajayAdminToken') || '';
   let bookings = [], blocked = [], durations = {}, services = [], slots = [];
   let viewY, viewM;
   let selected = '';
@@ -203,11 +203,11 @@
     const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
     const data = await r.json();
     if (!r.ok) { document.getElementById('loginErr').textContent = data.error || 'Login failed.'; return; }
-    token = data.token; sessionStorage.setItem('ajayAdminToken', token);
+    token = data.token; localStorage.setItem('ajayAdminToken', token);
     showDash();
   }
   function logout() {
-    token = ''; sessionStorage.removeItem('ajayAdminToken');
+    token = ''; localStorage.removeItem('ajayAdminToken');
     document.getElementById('dashView').style.display = 'none';
     document.getElementById('logoutBtn').style.display = 'none';
     document.getElementById('loginView').style.display = 'block';
