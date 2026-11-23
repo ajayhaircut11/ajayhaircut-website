@@ -17,36 +17,77 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ajay-admin-2026';
 // Without the key the site still takes bookings; emails are simply skipped.
 const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
 const OWNER_EMAIL = process.env.OWNER_EMAIL || 'Popularsalon1@gmail.com';
-async function sendEmail(to, subject, text) {
+async function sendEmail(to, subject, text, html) {
   if (!BREVO_API_KEY || !to) return;
   try {
+    const payload = {
+      sender: { name: 'Ajay Haircut', email: OWNER_EMAIL },
+      to: [{ email: to }],
+      subject, textContent: text,
+    };
+    if (html) payload.htmlContent = html;
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        sender: { name: 'Ajay Haircut', email: OWNER_EMAIL },
-        to: [{ email: to }],
-        subject, textContent: text,
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) console.error('Email failed:', res.status, (await res.text()).slice(0, 200));
   } catch (e) { console.error('Email failed:', e.message); }
 }
-function sendBookingEmails(b) {
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+// Branded booking email in the old site's design: dark header card with a
+// gold eyebrow line, then label/value rows.
+function bookingEmailHtml(eyebrow, title, rows, footerLines) {
+  const rowHtml = rows.map(r =>
+    '<tr><td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#8a8f9c;font-size:15px;">' + esc(r[0]) + '</td>' +
+    '<td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#141a29;font-size:15px;font-weight:700;text-align:right;">' + r[1] + '</td></tr>').join('');
+  const foot = (footerLines || []).map(l =>
+    '<div style="color:#8a8f9c;font-size:13.5px;line-height:1.5;text-align:center;">' + l + '</div>').join('');
+  return '<div style="margin:0;padding:24px 12px;background:#f4f2ed;font-family:Arial,Helvetica,sans-serif;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e6e2d9;">' +
+    '<tr><td style="background:#0d1526;padding:34px 28px 30px;">' +
+    '<div style="color:#c9a24b;font-size:13px;font-weight:700;letter-spacing:4px;">' + esc(eyebrow) + '</div>' +
+    '<div style="color:#ffffff;font-size:30px;font-weight:800;line-height:1.25;margin-top:10px;">' + esc(title) + '</div>' +
+    '</td></tr>' +
+    '<tr><td style="padding:10px 0 16px;"><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">' + rowHtml + '</table></td></tr>' +
+    (foot ? '<tr><td style="padding:0 28px 26px;">' + foot + '</td></tr>' : '') +
+    '</table></div>';
+}
+// Notification rules: website (public) bookings notify the owner by email
+// and text, and confirm to the customer. Dashboard bookings notify NOBODY
+// except the customer — and only by text, only when a phone was filled in.
+function sendBookingEmails(b, fromDashboard) {
   if (!BREVO_API_KEY) return;
   const when = b.date + ' at ' + b.time;
   if (b.email) {
     sendEmail(b.email,
-      'Booking confirmed \u2014 ' + b.service + ' on ' + b.date,
-      'Hi ' + b.name + ',\n\nYour booking at Ajay Haircut is confirmed.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nAjay Haircut \u00b7 Surrey, BC \u00b7 (778) 344-2550\nOpen daily 9AM\u20139PM, closed Tuesdays. Walk-ins welcome.\n\nNeed to change or cancel? Just call us at (778) 344-2550.\n');
+      'Booking Confirmed: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
+      'Hi ' + b.name + ',\n\nYour booking at Ajay Haircut is confirmed.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nAjay Haircut \u00b7 Unit 102, 9385 120 St, Surrey, BC \u00b7 (778) 344-2550\nOpen daily 9AM\u20139PM, closed Tuesdays.\n\nNeed to change or cancel? Just call us at (778) 344-2550.\n',
+      bookingEmailHtml('BOOKING CONFIRMED', 'Your appointment is confirmed', [
+        ['Service', esc(b.service)],
+        ['Date', esc(b.date)],
+        ['Time', esc(b.time)],
+      ], ['Ajay Haircut \u00b7 Unit 102, 9385 120 St, Surrey, BC', 'Need to change or cancel? Call (778) 344-2550']));
   }
+  if (fromDashboard) return;
   sendEmail(OWNER_EMAIL,
-    'New booking \u2014 ' + b.service + ' \u00b7 ' + when,
-    'New online booking:\n\nName: ' + b.name + '\nPhone: ' + (b.phone || '\u2014') + '\nEmail: ' + (b.email || '\u2014') + '\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\nSMS consent: ' + (b.smsConsent ? 'Yes' : 'No') + '\n');
+    'New Booking: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
+    'New online booking:\n\nName: ' + b.name + '\nPhone: ' + (b.phone || '\u2014') + '\nEmail: ' + (b.email || '\u2014') + '\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n',
+    bookingEmailHtml('NEW APPOINTMENT', 'You have a new booking', [
+      ['Service', esc(b.service)],
+      ['Date', esc(b.date)],
+      ['Time', esc(b.time)],
+      ['Customer', esc(b.name)],
+      ['Phone', '<span style="color:#c9a24b;">' + esc(b.phone || '\u2014') + '</span>'],
+      ['Email', b.email ? '<a href="mailto:' + esc(b.email) + '" style="color:#2f6fd0;text-decoration:underline;">' + esc(b.email) + '</a>' : '\u2014'],
+    ]));
 }
 // Booking texts via Twilio — the same account and number as the old site.
 // Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER (the Twilio number, E.164) to enable.
-// OWNER_PHONE (E.164) gets a text for each new booking; defaults to the shop number.
+// OWNER_PHONE (E.164) gets a text for each new WEBSITE booking (dashboard
+// bookings never notify the owner); defaults to the shop number.
 // Without the Twilio variables the site still takes bookings; texts are simply skipped.
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID || '';
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
@@ -76,17 +117,16 @@ async function sendSms(to, body) {
     return true;
   } catch (e) { console.error('SMS failed:', e.message); return false; }
 }
-function sendBookingTexts(b) {
+function sendBookingTexts(b, fromDashboard) {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || b.blockedSlot) return;
   const when = b.date + ' at ' + b.time;
-  if (b.phone && b.smsConsent) {
+  if (b.phone) {
     sendSms(normalizePhone(b.phone),
       'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Need to change it? Call (778) 344-2550.');
   }
-  if (OWNER_PHONE) {
-    sendSms(OWNER_PHONE,
-      'New booking: ' + b.name + ' - ' + b.service + ' on ' + when + (b.phone ? ' - ' + b.phone : ''));
-  }
+  if (fromDashboard || !OWNER_PHONE) return;
+  sendSms(OWNER_PHONE,
+    'New booking: ' + b.name + ' - ' + b.service + ' on ' + when + (b.phone ? ' - ' + b.phone : ''));
 }
 
 // ---------- Appointment reminders ----------
@@ -319,8 +359,8 @@ const server = http.createServer(async (req, res) => {
     };
     bookings.push(booking);
     saveBookings(bookings);
-    sendBookingEmails(booking);
-    sendBookingTexts(booking);
+    sendBookingEmails(booking, authed);
+    sendBookingTexts(booking, authed);
     return sendJson(res, 201, { ok: true, booking });
   }
 
