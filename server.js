@@ -227,8 +227,34 @@ function slotMinutes(t) {
   return h * 60 + parseInt(m[2], 10);
 }
 
-// Long-lived admin token derived from the password: survives server restarts,
-// and changing the password automatically invalidates old tokens.
+function slotLabel(mins) {
+  const h24 = Math.floor(mins / 60), m = mins % 60;
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+// The time a booking occupies: its service duration, so a 45-minute
+// Haircut & Beard at 9:00 AM blocks 9:00, 9:15 and 9:30 and the next
+// appointment can only start at 9:45. Blocked slots occupy only their
+// own 15 minutes.
+function bookingSpan(b) {
+  const start = slotMinutes(b.time);
+  const dur = b.blockedSlot ? 15 : (DURATIONS[b.service] || 30);
+  return { start, end: start + dur };
+}
+function spansOverlap(aStart, aEnd, b) {
+  const s = bookingSpan(b);
+  return aStart < s.end && s.start < aEnd;
+}
+function takenSlots(date) {
+  const taken = new Set();
+  for (const b of loadBookings()) {
+    if (b.date !== date || b.status !== 'booked') continue;
+    const { start, end } = bookingSpan(b);
+    for (let m = start; m < end; m += 15) taken.add(slotLabel(m));
+  }
+  return [...taken];
+}
 function adminToken() {
   return crypto.createHmac('sha256', ADMIN_PASSWORD).update('ajayhaircut-admin-v1').digest('hex');
 }
@@ -260,7 +286,7 @@ const server = http.createServer(async (req, res) => {
   // ---------- API ----------
   if (url.pathname === '/api/availability' && req.method === 'GET') {
     const date = url.searchParams.get('date') || '';
-    const taken = loadBookings().filter(b => b.date === date && b.status === 'booked').map(b => b.time);
+    const taken = takenSlots(date);
     return sendJson(res, 200, { date, slots: allSlots(), taken, blocked: loadBlocked().includes(date) });
   }
 
@@ -281,8 +307,10 @@ const server = http.createServer(async (req, res) => {
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
     if (loadBlocked().includes(date)) return sendJson(res, 400, { error: 'We are closed on this day. Please pick another day.' });
     const bookings = loadBookings();
-    if (bookings.some(x => x.date === date && x.time === time && x.status === 'booked'))
-      return sendJson(res, 409, { error: 'That slot was just taken. Please pick another time.' });
+    const nStart = slotMinutes(time);
+    const nEnd = nStart + (b.blockTime ? 15 : (DURATIONS[service] || 30));
+    if (bookings.some(x => x.date === date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
+      return sendJson(res, 409, { error: 'That time overlaps an existing booking. Please pick another time.' });
     const booking = {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
       phone: String(phone || '').slice(0, 30), email, service, date, time,
@@ -353,8 +381,14 @@ const server = http.createServer(async (req, res) => {
     const d = new Date(next.date + 'T12:00:00');
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
     if (loadBlocked().includes(next.date)) return sendJson(res, 400, { error: 'That day is blocked.' });
-    if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.time === next.time && x.status === 'booked'))
-      return sendJson(res, 409, { error: 'That slot is already taken.' });
+    // Overlap is only enforced when the booking actually moves or changes
+    // service — older bookings may already overlap and must stay editable.
+    if (next.date !== cur.date || next.time !== cur.time || next.service !== cur.service || next.blockedSlot !== !!cur.blockedSlot) {
+      const nStart = slotMinutes(next.time);
+      const nEnd = nStart + (next.blockedSlot ? 15 : (DURATIONS[next.service] || 30));
+      if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
+        return sendJson(res, 409, { error: 'That slot is already taken.' });
+    }
     Object.assign(cur, next);
     saveBookings(bookings);
     return sendJson(res, 200, { ok: true, booking: cur });
