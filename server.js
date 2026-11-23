@@ -212,28 +212,30 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
     const b = await readBody(req);
+    // One-time history import: with the right X-Import-Key header, bookings are
+    // stored silently (no emails/texts) and historical times/statuses are kept.
+    const isImport = !!process.env.IMPORT_KEY && req.headers['x-import-key'] === process.env.IMPORT_KEY;
     const { name, phone, service, date, time } = b;
     const email = String(b.email || '').trim().slice(0, 120);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { error: 'That email address does not look right.' });
     if ((!name && !b.blockTime) || !service || !date || !time) return sendJson(res, 400, { error: 'Name, service, date and time are required.' });
     if (!SERVICES.includes(service)) return sendJson(res, 400, { error: 'Unknown service.' });
-    if (!allSlots().includes(time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
+    if (!isImport && !allSlots().includes(time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
     const d = new Date(date + 'T12:00:00');
-    if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
-    if (loadBlocked().includes(date)) return sendJson(res, 400, { error: 'We are closed on this day. Please pick another day.' });
+    if (!isImport && d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
+    if (!isImport && loadBlocked().includes(date)) return sendJson(res, 400, { error: 'We are closed on this day. Please pick another day.' });
     const bookings = loadBookings();
-    if (bookings.some(x => x.date === date && x.time === time && x.status !== 'cancelled'))
+    if (!isImport && bookings.some(x => x.date === date && x.time === time && x.status !== 'cancelled'))
       return sendJson(res, 409, { error: 'That slot was just taken. Please pick another time.' });
     const booking = {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
       phone: String(phone || '').slice(0, 30), email, service, date, time,
       notes: String(b.notes || '').slice(0, 300), blockedSlot: !!b.blockTime,
-      smsConsent: !!b.smsConsent, status: 'booked', createdAt: new Date().toISOString(),
+      smsConsent: !!b.smsConsent, status: isImport && b.status === 'cancelled' ? 'cancelled' : 'booked', createdAt: new Date().toISOString(),
     };
     bookings.push(booking);
     saveBookings(bookings);
-    sendBookingEmails(booking);
-    sendBookingTexts(booking);
+    if (!isImport) { sendBookingEmails(booking); sendBookingTexts(booking); }
     return sendJson(res, 201, { ok: true, booking });
   }
 
