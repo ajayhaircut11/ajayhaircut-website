@@ -164,6 +164,33 @@ function shopInstant(dateStr, timeStr) {
   return Date.UTC(y, mo - 1, da, Math.floor(mins / 60), mins % 60) + vancouverOffsetMs(y, mo, da, mins);
 }
 let reminderCheckRunning = false;
+// Cancellation notices: online customers are emailed, dashboard customers
+// are texted. If the preferred channel is unavailable, the other is used so
+// the customer always hears. Legacy bookings have no source: email first.
+function sendCancellationNotice(b) {
+  if (b.blockedSlot) return;
+  const emailIt = () => {
+    if (!b.email || !BREVO_API_KEY) return false;
+    sendEmail(b.email,
+      'Appointment Cancelled: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
+      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been cancelled.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nTo rebook, call us at (778) 344-2550 or visit ajayhaircut.com.\n',
+      bookingEmailHtml('APPOINTMENT CANCELLED', 'Your appointment has been cancelled', [
+        ['Service', esc(b.service)],
+        ['Date', esc(b.date)],
+        ['Time', esc(b.time)],
+      ], ['To rebook, call (778) 344-2550 or visit ajayhaircut.com']));
+    return true;
+  };
+  const textIt = () => {
+    if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
+    sendSms(normalizePhone(b.phone),
+      'Hi ' + b.name + ', your appointment at Ajay Haircut (' + b.service + ' on ' + b.date + ' at ' + b.time + ') has been cancelled. To rebook, call (778) 344-2550 or visit ajayhaircut.com.');
+    return true;
+  };
+  if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
+  else { if (!emailIt()) textIt(); }
+}
+
 async function sendReminderEmail(b) {
   if (!b.email) return false;
   const first = String(b.name || '').trim().split(/\s+/)[0] || 'there';
@@ -424,7 +451,7 @@ const server = http.createServer(async (req, res) => {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
       phone: String(phone || '').slice(0, 30), email, service, services: svcList, date, time,
       notes: String(b.notes || '').slice(0, 300), blockedSlot: !!b.blockTime, blockMinutes,
-      smsConsent: authed ? !!b.smsConsent : true, status: 'booked', createdAt: new Date().toISOString(),
+      source: authed ? 'dashboard' : 'online', smsConsent: authed ? !!b.smsConsent : true, status: 'booked', createdAt: new Date().toISOString(),
     };
     bookings.push(booking);
     saveBookings(bookings);
@@ -524,8 +551,10 @@ const server = http.createServer(async (req, res) => {
     const bookings = loadBookings();
     const bk = bookings.find(x => x.id === statusMatch[1]);
     if (!bk) return sendJson(res, 404, { error: 'Booking not found.' });
+    const wasStatus = bk.status;
     bk.status = b.status;
     saveBookings(bookings);
+    if (b.status === 'cancelled' && wasStatus !== 'cancelled') sendCancellationNotice(bk);
     return sendJson(res, 200, { ok: true, booking: bk });
   }
 
@@ -535,8 +564,10 @@ const server = http.createServer(async (req, res) => {
     const bookings = loadBookings();
     const idx = bookings.findIndex(b => b.id === delMatch[1]);
     if (idx === -1) return sendJson(res, 404, { error: 'Booking not found.' });
+    const wasDelStatus = bookings[idx].status;
     bookings[idx].status = 'cancelled';
     saveBookings(bookings);
+    if (wasDelStatus !== 'cancelled') sendCancellationNotice(bookings[idx]);
     return sendJson(res, 200, { ok: true });
   }
 
