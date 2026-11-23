@@ -403,7 +403,7 @@
     if (editingId) {
       r = await fetch('/api/bookings/' + editingId, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) });
     } else {
-      r = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      r = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) });
     }
     const data = await r.json();
     if (!r.ok) { errEl.textContent = data.error || 'Could not save. Please try again.'; return; }
