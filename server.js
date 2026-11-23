@@ -179,10 +179,16 @@ function slotMinutes(t) {
   return h * 60 + parseInt(m[2], 10);
 }
 
-const tokens = new Set();
+// Long-lived admin token derived from the password: survives server restarts,
+// and changing the password automatically invalidates old tokens.
+function adminToken() {
+  return crypto.createHmac('sha256', ADMIN_PASSWORD).update('ajayhaircut-admin-v1').digest('hex');
+}
 function isAuthed(req) {
   const t = (req.headers.authorization || '').replace('Bearer ', '');
-  return tokens.has(t);
+  if (!t) return false;
+  const a = Buffer.from(t), b = Buffer.from(adminToken());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 function sendJson(res, code, obj) {
@@ -240,9 +246,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/login' && req.method === 'POST') {
     const { password } = await readBody(req);
     if (password !== ADMIN_PASSWORD) return sendJson(res, 401, { error: 'Wrong password.' });
-    const token = crypto.randomBytes(24).toString('hex');
-    tokens.add(token);
-    return sendJson(res, 200, { token });
+    return sendJson(res, 200, { token: adminToken() });
   }
 
   if (url.pathname === '/api/bookings' && req.method === 'GET') {
