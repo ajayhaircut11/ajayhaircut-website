@@ -57,7 +57,7 @@ function bookingEmailHtml(eyebrow, title, rows, footerLines) {
     '</table></div>';
 }
 // Notification rules: website (public) bookings notify the owner by email
-// and text, and confirm to the customer. Dashboard bookings notify NOBODY
+// only, and the customer by email only. Dashboard bookings notify NOBODY
 // except the customer — and only by text, only when a phone was filled in.
 function sendBookingEmails(b, fromDashboard) {
   if (!BREVO_API_KEY) return;
@@ -75,7 +75,7 @@ function sendBookingEmails(b, fromDashboard) {
   if (fromDashboard) return;
   sendEmail(OWNER_EMAIL,
     'New Booking: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
-    'New online booking:\n\nName: ' + b.name + '\nPhone: ' + (b.phone || '\u2014') + '\nEmail: ' + (b.email || '\u2014') + '\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n',
+    'New online booking:\n\nName: ' + b.name + '\nPhone: ' + (b.phone || '\u2014') + '\nEmail: ' + (b.email || '\u2014') + '\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n' + (b.notes ? 'Notes: ' + b.notes + '\n' : ''),
     bookingEmailHtml('NEW APPOINTMENT', 'You have a new booking', [
       ['Service', esc(b.service)],
       ['Date', esc(b.date)],
@@ -83,6 +83,7 @@ function sendBookingEmails(b, fromDashboard) {
       ['Customer', esc(b.name)],
       ['Phone', '<span style="color:#c9a24b;">' + esc(b.phone || '\u2014') + '</span>'],
       ['Email', b.email ? '<a href="mailto:' + esc(b.email) + '" style="color:#2f6fd0;text-decoration:underline;">' + esc(b.email) + '</a>' : '\u2014'],
+      ...(b.notes ? [['Notes', esc(b.notes)]] : []),
     ]));
 }
 // Booking texts via Twilio — the same account and number as the old site.
