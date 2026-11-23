@@ -368,6 +368,38 @@
   const msgEl = document.getElementById('formMsg');
   let selectedTime = null;
   let loadedDate = null;
+  let daySlots = [];
+  let daySpans = [];
+  function slotToMin(t) {
+    const m = t.match(/(\d+):(\d+)\s*(AM|PM)/);
+    let mins = (parseInt(m[1], 10) % 12) * 60 + parseInt(m[2], 10);
+    if (m[3] === 'PM') mins += 720;
+    return mins;
+  }
+  function selectedDuration() {
+    return [...document.querySelectorAll('#svcBox input:checked')].reduce((s, i) => s + (SVC_DUR[i.value] || 30), 0);
+  }
+  // A start time is only offered if the whole service duration fits before
+  // the next booking — e.g. a 45-min Haircut & Beard cannot start at 9:45
+  // when the next appointment is at 10:00.
+  function renderSlots() {
+    slotsEl.innerHTML = '';
+    const dur = selectedDuration() || 15;
+    let selStillFree = false;
+    daySlots.forEach(t => {
+      const start = slotToMin(t);
+      const clash = daySpans.some(sp => start < sp.end && start + dur > sp.start);
+      const div = document.createElement('div');
+      div.className = 'slot' + (clash ? ' taken' : '');
+      div.textContent = t;
+      if (!clash) {
+        if (t === selectedTime) { div.classList.add('sel'); selStillFree = true; }
+        div.onclick = () => { document.querySelectorAll('.slot').forEach(s => s.classList.remove('sel')); div.classList.add('sel'); selectedTime = t; };
+      }
+      slotsEl.appendChild(div);
+    });
+    if (selectedTime && !selStillFree) selectedTime = null;
+  }
 
   const today = new Date();
   dateInput.min = today.toISOString().split('T')[0];
@@ -383,22 +415,18 @@
     if (!val) { loadedDate = null; return; }
     loadedDate = val;
     const d = new Date(val + 'T12:00:00');
-    if (d.getDay() === 2) { slotsEl.innerHTML = '<p class="err">We are closed on Tuesdays. Please pick another day.</p>'; return; }
+    if (d.getDay() === 2) { daySlots = []; daySpans = []; slotsEl.innerHTML = '<p class="err">We are closed on Tuesdays. Please pick another day.</p>'; return; }
     slotsEl.innerHTML = '<p style="color:var(--muted);font-size:13.5px;">Loading times…</p>';
     const r = await fetch('/api/availability?date=' + val);
     const data = await r.json();
-    if (data.blocked) { slotsEl.innerHTML = '<p class="err">We are closed on this day. Please pick another day.</p>'; return; }
-    slotsEl.innerHTML = '';
-    data.slots.forEach(t => {
-      const div = document.createElement('div');
-      div.className = 'slot' + (data.taken.includes(t) ? ' taken' : '');
-      div.textContent = t;
-      div.onclick = () => { document.querySelectorAll('.slot').forEach(s => s.classList.remove('sel')); div.classList.add('sel'); selectedTime = t; };
-      slotsEl.appendChild(div);
-    });
+    if (data.blocked) { daySlots = []; daySpans = []; slotsEl.innerHTML = '<p class="err">We are closed on this day. Please pick another day.</p>'; return; }
+    daySlots = data.slots || [];
+    daySpans = data.spans || [];
+    renderSlots();
   });
 
   const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 120, 'Beard Perm': 30, "Men's Facial": 45 };
+  document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); }));
   document.getElementById('bookForm').addEventListener('submit', async (e) => {
     e.preventDefault(); msgEl.textContent = ''; msgEl.className = 'msg';
     if (!selectedTime) { const sel = document.querySelector('.slot.sel'); if (sel) selectedTime = sel.textContent; }
@@ -442,6 +470,7 @@
     document.getElementById('svcTotal').textContent = '';
     selectedTime = null;
     loadedDate = null;
+    daySlots = []; daySpans = [];
     slotsEl.innerHTML = '<p style="color:var(--muted);font-size:13.5px;">Pick a date first.</p>';
     msgEl.textContent = ''; msgEl.className = 'msg';
     dateInput.dispatchEvent(new Event('change'));
