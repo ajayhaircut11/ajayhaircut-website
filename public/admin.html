@@ -94,6 +94,14 @@
   .modal .row { display:flex; gap:10px; margin-top:22px; flex-wrap:wrap; }
   .btn-ghost { background:#fff; border:1px solid var(--line); color:var(--ink); padding:12px 18px; border-radius:11px; font-weight:600; font-size:14.5px; cursor:pointer; }
   .btn-danger { background:#fff; border:1px solid var(--red-line); color:var(--red); padding:12px 18px; border-radius:11px; font-weight:700; font-size:14.5px; cursor:pointer; }
+  td.acts { white-space:nowrap; }
+  .actbtn { background:none; border:none; font:inherit; font-weight:700; font-size:14.5px; cursor:pointer; padding:4px 5px; }
+  .actbtn.edit, .actbtn.complete { color:var(--navy); }
+  .actbtn.cancel { color:var(--red); }
+  tr.completed td { color:var(--muted); }
+  tr.completed td .tdur, tr.completed td .tnote { color:var(--muted); }
+  .sectoggle { background:none; border:none; font:inherit; font-weight:600; font-size:14.5px; color:var(--navy); cursor:pointer; padding:12px 2px 2px; display:block; }
+  .sectable { width:100%; border-collapse:collapse; }
 </style>
 </head>
 <body>
@@ -139,6 +147,7 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
+    <div id="daySections"></div>
   </div>
 </div>
 
@@ -187,7 +196,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function slotMinutes(t) { const m = String(t).match(/^(\d+):(\d+) (AM|PM)$/); if (!m) return 0; let h = parseInt(m[1], 10) % 12; if (m[3] === 'PM') h += 12; return h * 60 + parseInt(m[2], 10); }
   function isTuesday(k) { return new Date(k + 'T12:00:00').getDay() === 2; }
-  function activeOn(k) { return bookings.filter(b => b.date === k && b.status !== 'cancelled' && !b.blockedSlot); }
+  function activeOn(k) { return bookings.filter(b => b.date === k && b.status === 'booked' && !b.blockedSlot); }
 
   async function login() {
     const pw = document.getElementById('pw').value;
@@ -240,11 +249,50 @@
     }
   }
 
+  async function setStatus(id, status) {
+    const r = await fetch('/api/bookings/' + id + '/status', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ status }) });
+    if (r.ok) loadAll();
+  }
+
+  function actionCell(b) {
+    const td = document.createElement('td');
+    td.className = 'acts';
+    const mk = (label, cls, fn) => { const btn = document.createElement('button'); btn.className = 'actbtn ' + cls; btn.textContent = label; btn.onclick = fn; td.appendChild(btn); };
+    if (b.status === 'booked') {
+      mk('Edit', 'edit', () => openModal(b));
+      if (!b.blockedSlot) mk('Complete', 'complete', () => setStatus(b.id, 'completed'));
+      mk('Cancel', 'cancel', () => { if (confirm('Cancel this booking?')) setStatus(b.id, 'cancelled'); });
+    } else {
+      mk('Restore', 'edit', () => setStatus(b.id, 'booked'));
+    }
+    return td;
+  }
+
+  function bookingRow(b) {
+    const tr = document.createElement('tr');
+    if (b.status === 'cancelled') tr.className = 'cancelled';
+    if (b.status === 'completed') tr.className = 'completed';
+    const dur = durations[b.service] ? '<div class="tdur">' + durations[b.service] + ' min</div>' : '';
+    const note = b.notes ? '<div class="tnote">' + esc(b.notes) + '</div>' : '';
+    const tag = b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : b.status === 'completed' ? '<span class="tag">Completed</span>' : '';
+    const nameHtml = b.blockedSlot
+      ? '<span style="color:var(--red);font-weight:700;">Blocked</span>'
+      : esc(b.name) + tag;
+    tr.innerHTML = '<td><div class="ttime">' + esc(b.time) + '</div>' + dur + '</td>' +
+      '<td>' + nameHtml + note + '</td>' +
+      '<td>' + (b.blockedSlot ? '—' : esc(b.service)) + '</td>' +
+      '<td>' + esc(b.phone || 'N/A') + '</td>';
+    tr.appendChild(actionCell(b));
+    return tr;
+  }
+
   function renderDay() {
     const d = new Date(selected + 'T12:00:00');
     document.getElementById('dayTitle').textContent = DAYS[d.getDay()] + ', ' + MON3[d.getMonth()] + ' ' + d.getDate();
-    const dayBookings = bookings.filter(b => b.date === selected)
-      .sort((a, b) => (a.status === 'cancelled') - (b.status === 'cancelled') || slotMinutes(a.time) - slotMinutes(b.time));
+    const byTime = (a, b) => slotMinutes(a.time) - slotMinutes(b.time);
+    const main = bookings.filter(b => b.date === selected && b.status === 'booked').sort(byTime);
+    const completed = bookings.filter(b => b.date === selected && b.status === 'completed').sort(byTime);
+    const cancelled = bookings.filter(b => b.date === selected && b.status === 'cancelled').sort(byTime);
     const n = activeOn(selected).length;
     const isBlocked = blocked.includes(selected);
     const tue = isTuesday(selected);
@@ -256,32 +304,27 @@
 
     const rows = document.getElementById('rows');
     rows.innerHTML = '';
-    if (!dayBookings.length) {
+    if (!main.length) {
       rows.innerHTML = '<tr><td colspan="5" class="empty">No bookings for this day.</td></tr>';
-      return;
     }
-    dayBookings.forEach(b => {
-      const tr = document.createElement('tr');
-      if (b.status === 'cancelled') tr.className = 'cancelled';
-      const dur = durations[b.service] ? '<div class="tdur">' + durations[b.service] + ' min</div>' : '';
-      const note = b.notes ? '<div class="tnote">' + esc(b.notes) + '</div>' : '';
-      const nameHtml = b.blockedSlot
-        ? '<span style="color:var(--red);font-weight:700;">Blocked</span>'
-        : esc(b.name) + (b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : '');
-      tr.innerHTML = '<td><div class="ttime">' + esc(b.time) + '</div>' + dur + '</td>' +
-        '<td>' + nameHtml + note + '</td>' +
-        '<td>' + (b.blockedSlot ? '—' : esc(b.service)) + '</td>' +
-        '<td>' + esc(b.phone || 'N/A') + '</td>';
-      const td = document.createElement('td');
-      if (b.status !== 'cancelled') {
-        const btn = document.createElement('button');
-        btn.className = 'editbtn'; btn.textContent = 'Edit';
-        btn.onclick = () => openModal(b);
-        td.appendChild(btn);
-      }
-      tr.appendChild(td);
-      rows.appendChild(tr);
-    });
+    main.forEach(b => rows.appendChild(bookingRow(b)));
+
+    const sec = document.getElementById('daySections');
+    sec.innerHTML = '';
+    const addSection = (label, list) => {
+      if (!list.length) return;
+      const t = document.createElement('button');
+      t.className = 'sectoggle'; t.textContent = 'Show ' + label + ' (' + list.length + ')';
+      const box = document.createElement('div'); box.style.display = 'none';
+      const tbl = document.createElement('table'); tbl.className = 'sectable';
+      const tb = document.createElement('tbody');
+      list.forEach(b => tb.appendChild(bookingRow(b)));
+      tbl.appendChild(tb); box.appendChild(tbl);
+      t.onclick = () => { const open = box.style.display !== 'none'; box.style.display = open ? 'none' : ''; t.textContent = (open ? 'Show ' : 'Hide ') + label + ' (' + list.length + ')'; };
+      sec.appendChild(t); sec.appendChild(box);
+    };
+    addSection('completed', completed);
+    addSection('cancelled', cancelled);
   }
 
   document.getElementById('blockBtn').onclick = async () => {
@@ -299,7 +342,7 @@
     pickedTime = null;
     const box = document.getElementById('fChips');
     box.innerHTML = '';
-    const taken = bookings.filter(b => b.date === dateVal && b.status !== 'cancelled' && b.id !== editingId).map(b => b.time);
+    const taken = bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).map(b => b.time);
     const isToday = dateVal === todayKey();
     const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
     slots.forEach(t => {
