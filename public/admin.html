@@ -85,6 +85,11 @@
   .blockrow { display:flex; align-items:center; gap:11px; cursor:pointer; margin-bottom:4px; }
   .blockrow input { width:21px; height:21px; accent-color:var(--navy); cursor:pointer; }
   .blockrow span { font-size:15.5px; font-weight:700; color:var(--navy); }
+  .fsvcbox { display:grid; gap:7px; }
+  .fsvc { display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--line); border-radius:9px; background:var(--chip); cursor:pointer; font-size:15px; font-weight:500; color:var(--navy); }
+  .fsvc input { width:19px; height:19px; accent-color:var(--navy); flex:none; margin:0; }
+  .fsvc .mins { margin-left:auto; color:#8a8f9c; font-size:13px; white-space:nowrap; }
+  .fsvc:has(input:checked) { border-color:var(--navy); background:#eef0f6; }
   .chips { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
   .chip { background:var(--chip); border:1px solid var(--line); border-radius:11px; padding:16px 2px; text-align:center; font-size:16px; font-weight:600; color:var(--navy); cursor:pointer; }
   .chip:hover { border-color:var(--gold); }
@@ -169,8 +174,8 @@
         <option value="240">4 hours</option>
       </select>
     </div>
-    <label class="flabel" for="fService">Service</label>
-    <select id="fService"></select>
+    <label class="flabel">Service — choose one or more</label>
+    <div id="fServiceBox" class="fsvcbox"></div>
     <label class="flabel" for="fDate">Date</label>
     <input id="fDate" type="date">
     <label class="flabel">Time</label>
@@ -285,7 +290,7 @@
     const tr = document.createElement('tr');
     if (b.status === 'cancelled') tr.className = 'cancelled';
     if (b.status === 'completed') tr.className = 'completed';
-    const durMin = b.blockedSlot ? (b.blockMinutes || 15) : durations[b.service];
+    const durMin = b.blockedSlot ? (b.blockMinutes || 15) : (Array.isArray(b.services) && b.services.length ? b.services : [b.service]).reduce((s2, sv) => s2 + (durations[sv] || 30), 0);
     const dur = durMin ? '<div class="tdur">' + durMin + ' min</div>' : '';
     const note = b.notes ? '<div class="tnote">' + esc(b.notes) + '</div>' : '';
     const tag = b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : b.status === 'completed' ? '<span class="tag">Completed</span>' : '';
@@ -359,7 +364,7 @@
     const takenSet = new Set();
     bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).forEach(b => {
       const start = slotMinutes(b.time);
-      const dur = b.blockedSlot ? (b.blockMinutes || 15) : (durations[b.service] || 30);
+      const dur = b.blockedSlot ? (b.blockMinutes || 15) : (Array.isArray(b.services) && b.services.length ? b.services : [b.service]).reduce((s2, sv) => s2 + (durations[sv] || 30), 0);
       slots.forEach(t => { const m = slotMinutes(t); if (m >= start && m < start + dur) takenSet.add(t); });
     });
     const taken = [...takenSet];
@@ -384,15 +389,22 @@
     editingId = booking ? booking.id : null;
     document.getElementById('modalTitle').textContent = booking ? 'Edit booking' : 'Add booking';
     document.getElementById('formErr').textContent = '';
-    const svc = document.getElementById('fService');
-    svc.innerHTML = '';
-    services.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s + (durations[s] ? ' · ' + durations[s] + ' min' : ''); svc.appendChild(o); });
+    const svcBox = document.getElementById('fServiceBox');
+    svcBox.innerHTML = '';
+    const curList = booking ? (Array.isArray(booking.services) && booking.services.length ? booking.services : (booking.service ? [booking.service] : [])) : [];
+    services.forEach(s => {
+      const lab = document.createElement('label'); lab.className = 'fsvc';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = s; cb.checked = curList.includes(s);
+      const nm = document.createElement('span'); nm.textContent = s;
+      lab.appendChild(cb); lab.appendChild(nm);
+      if (durations[s]) { const mn = document.createElement('span'); mn.className = 'mins'; mn.textContent = durations[s] + ' min'; lab.appendChild(mn); }
+      svcBox.appendChild(lab);
+    });
     document.getElementById('fBlock').checked = booking ? !!booking.blockedSlot : false;
     document.getElementById('fBlockDur').value = booking && booking.blockedSlot ? String(booking.blockMinutes || 15) : '30';
     document.getElementById('fName').value = booking && !booking.blockedSlot ? booking.name : '';
     document.getElementById('fPhone').value = booking ? (booking.phone || '') : '';
     document.getElementById('fNotes').value = booking ? (booking.notes || '') : '';
-    if (booking) svc.value = booking.service;
     const dateEl = document.getElementById('fDate');
     dateEl.value = booking ? booking.date : selected;
     buildChips(dateEl.value, booking ? booking.time : null);
@@ -413,7 +425,7 @@
       name: document.getElementById('fName').value.trim(),
       phone: document.getElementById('fPhone').value.trim(),
       notes: document.getElementById('fNotes').value.trim(),
-      service: document.getElementById('fService').value,
+      services: [...document.querySelectorAll('#fServiceBox input:checked')].map(i => i.value),
       date: document.getElementById('fDate').value,
       time: pickedTime,
       blockTime,
@@ -422,6 +434,7 @@
     const errEl = document.getElementById('formErr');
     if (!payload.date || !payload.time) { errEl.textContent = 'Please pick a date and a time.'; return; }
     if (!blockTime && !payload.name) { errEl.textContent = 'Customer name is required.'; return; }
+    if (!blockTime && payload.services.length === 0) { errEl.textContent = 'Please choose at least one service.'; return; }
     let r;
     if (editingId) {
       r = await fetch('/api/bookings/' + editingId, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) });
