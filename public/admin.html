@@ -374,18 +374,28 @@
     pickedTime = null;
     const box = document.getElementById('fChips');
     box.innerHTML = '';
-    const takenSet = new Set();
+    const spans = [];
     bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).forEach(b => {
       const start = slotMinutes(b.time);
       const dur = b.blockedSlot ? (b.blockMinutes || 15) : (Array.isArray(b.services) && b.services.length ? b.services : [b.service]).reduce((s2, sv) => s2 + (durations[sv] || 30), 0);
-      slots.forEach(t => { const m = slotMinutes(t); if (m >= start && m < start + dur) takenSet.add(t); });
+      spans.push([start, start + dur]);
     });
-    const taken = [...takenSet];
+    // The new booking must FIT in the gap: a start time is off when its
+    // full duration (selected services, or the block length) would run
+    // into an existing booking — e.g. a 45-min service cannot start in a
+    // 15-minute gap before the next appointment.
+    let newDur;
+    if (document.getElementById('fBlock').checked) newDur = parseInt(document.getElementById('fBlockDur').value, 10) || 15;
+    else {
+      const sel = [...document.querySelectorAll('#fServiceBox input:checked')].map(i => i.value);
+      newDur = sel.length ? sel.reduce((s2, sv) => s2 + (durations[sv] || 30), 0) : 30;
+    }
     const isToday = dateVal === todayKey();
     const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
     slots.forEach(t => {
       const chip = document.createElement('div');
-      const off = taken.includes(t) || (isToday && slotMinutes(t) <= nowMin);
+      const m = slotMinutes(t);
+      const off = (t !== keepTime && spans.some(([s, e]) => m < e && s < m + newDur)) || (isToday && m <= nowMin);
       chip.className = 'chip' + (off ? ' off' : '');
       chip.textContent = t.replace(' ', ' ');
       if (!off) chip.onclick = () => { box.querySelectorAll('.chip').forEach(c => c.classList.remove('sel')); chip.classList.add('sel'); pickedTime = t; };
@@ -410,6 +420,7 @@
     orderedServices.forEach(s => {
       const lab = document.createElement('label'); lab.className = 'fsvc';
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = s; cb.checked = curList.includes(s);
+      cb.addEventListener('change', () => buildChips(document.getElementById('fDate').value, pickedTime));
       const nm = document.createElement('span'); nm.textContent = s;
       lab.appendChild(cb); lab.appendChild(nm);
       if (durations[s]) { const mn = document.createElement('span'); mn.className = 'mins'; mn.textContent = durations[s] + ' min'; lab.appendChild(mn); }
@@ -429,7 +440,8 @@
   }
   function closeModal() { overlay.classList.remove('open'); }
   document.getElementById('fDate').addEventListener('change', e => buildChips(e.target.value, null));
-  document.getElementById('fBlock').addEventListener('change', syncBlockUI);
+  document.getElementById('fBlock').addEventListener('change', () => { syncBlockUI(); buildChips(document.getElementById('fDate').value, pickedTime); });
+  document.getElementById('fBlockDur').addEventListener('change', () => buildChips(document.getElementById('fDate').value, pickedTime));
   document.getElementById('addBtn').onclick = () => openModal(null);
   document.getElementById('closeBtn').onclick = closeModal;
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
