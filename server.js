@@ -59,18 +59,21 @@ function bookingEmailHtml(eyebrow, title, rows, footerLines) {
 // Notification rules: website (public) bookings notify the owner by email
 // only, and the customer by email only. Dashboard bookings notify NOBODY
 // except the customer — and only by text, only when a phone was filled in.
+const PERM_INSTRUCTIONS_TEXT = 'Beard Perm - before your appointment:\n- Before coming, wash your beard with a proper shampoo.\n- Come with a clean, dry beard - do not apply beard oil, balm or wax that day.\n- Any other questions? Call (778) 344-2550.';
+const PERM_INSTRUCTIONS_HTML = '<div style="text-align:left;color:#141a29;font-size:14px;line-height:1.6;"><b>Beard Perm \u2014 before your appointment:</b><br>\u2022 Before coming, wash your beard with a proper shampoo.<br>\u2022 Come with a clean, dry beard \u2014 no beard oil, balm or wax that day.<br>\u2022 Any other questions? Call (778) 344-2550.</div>';
+function hasBeardPerm(b) { const list = Array.isArray(b.services) && b.services.length ? b.services : [b.service]; return list.includes('Beard Perm'); }
 function sendBookingEmails(b, fromDashboard) {
   if (!BREVO_API_KEY) return;
   const when = b.date + ' at ' + b.time;
   if (b.email) {
     sendEmail(b.email,
       'Booking Confirmed: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
-      'Hi ' + b.name + ',\n\nYour booking at Ajay Haircut is confirmed.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nAjay Haircut \u00b7 Unit 102, 9385 120 St, Delta, BC \u00b7 (778) 344-2550\nOpen daily 9AM\u20139PM, closed Tuesdays.\n\nNeed to change or cancel? Just call us at (778) 344-2550.\n',
+      'Hi ' + b.name + ',\n\nYour booking at Ajay Haircut is confirmed.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nAjay Haircut \u00b7 Unit 102, 9385 120 St, Delta, BC \u00b7 (778) 344-2550\nOpen daily 9AM\u20139PM, closed Tuesdays.\n\nNeed to change or cancel? Just call us at (778) 344-2550.\n' + (hasBeardPerm(b) ? '\n' + PERM_INSTRUCTIONS_TEXT + '\n' : ''),
       bookingEmailHtml('BOOKING CONFIRMED', 'Your appointment is confirmed', [
         ['Service', esc(b.service)],
         ['Date', esc(b.date)],
         ['Time', esc(b.time)],
-      ], ['Ajay Haircut \u00b7 Unit 102, 9385 120 St, Delta, BC', 'Need to change or cancel? Call (778) 344-2550']));
+      ], [...(hasBeardPerm(b) ? [PERM_INSTRUCTIONS_HTML] : []), 'Ajay Haircut \u00b7 Unit 102, 9385 120 St, Delta, BC', 'Need to change or cancel? Call (778) 344-2550']));
   }
   if (fromDashboard) return;
   sendEmail(OWNER_EMAIL,
@@ -128,6 +131,10 @@ function sendBookingTexts(b, authed) {
   if (b.phone) {
     sendSms(normalizePhone(b.phone),
       'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change or cancel? Call (778) 344-2550.');
+    if (hasBeardPerm(b)) {
+      sendSms(normalizePhone(b.phone),
+        'Ajay Haircut - Beard Perm instructions: Before coming, wash your beard with a proper shampoo. Come with a clean, dry beard - no beard oil, balm or wax that day. Questions? Call (778) 344-2550.');
+    }
   }
   // The owner is never texted about bookings — website bookings reach him
   // by email only, and dashboard bookings do not notify him at all.
