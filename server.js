@@ -64,12 +64,12 @@ function sendBookingEmails(b, fromDashboard) {
   if (b.email) {
     sendEmail(b.email,
       'Booking Confirmed: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
-      'Hi ' + b.name + ',\n\nYour booking at Ajay Haircut is confirmed.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nAjay Haircut \u00b7 Unit 102, 9385 120 St, Surrey, BC \u00b7 (778) 344-2550\nOpen daily 9AM\u20139PM, closed Tuesdays.\n\nNeed to change or cancel? Just call us at (778) 344-2550.\n',
+      'Hi ' + b.name + ',\n\nYour booking at Ajay Haircut is confirmed.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nAjay Haircut \u00b7 Unit 102, 9385 120 St, Delta, BC \u00b7 (778) 344-2550\nOpen daily 9AM\u20139PM, closed Tuesdays.\n\nNeed to change or cancel? Just call us at (778) 344-2550.\n',
       bookingEmailHtml('BOOKING CONFIRMED', 'Your appointment is confirmed', [
         ['Service', esc(b.service)],
         ['Date', esc(b.date)],
         ['Time', esc(b.time)],
-      ], ['Ajay Haircut \u00b7 Unit 102, 9385 120 St, Surrey, BC', 'Need to change or cancel? Call (778) 344-2550']));
+      ], ['Ajay Haircut \u00b7 Unit 102, 9385 120 St, Delta, BC', 'Need to change or cancel? Call (778) 344-2550']));
   }
   if (fromDashboard) return;
   sendEmail(OWNER_EMAIL,
@@ -86,8 +86,8 @@ function sendBookingEmails(b, fromDashboard) {
 }
 // Booking texts via Twilio — the same account and number as the old site.
 // Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER (the Twilio number, E.164) to enable.
-// OWNER_PHONE (E.164) gets a text for each new WEBSITE booking (dashboard
-// bookings never notify the owner); defaults to the shop number.
+// OWNER_PHONE is kept for reference only — the owner is not texted about
+// bookings (email only for website bookings, nothing for dashboard ones).
 // Without the Twilio variables the site still takes bookings; texts are simply skipped.
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID || '';
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
@@ -117,16 +117,15 @@ async function sendSms(to, body) {
     return true;
   } catch (e) { console.error('SMS failed:', e.message); return false; }
 }
-function sendBookingTexts(b, fromDashboard) {
+function sendBookingTexts(b) {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || b.blockedSlot) return;
   const when = b.date + ' at ' + b.time;
   if (b.phone) {
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Surrey, BC. Need to change it? Call (778) 344-2550.');
+      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change it? Call (778) 344-2550.');
   }
-  if (fromDashboard || !OWNER_PHONE) return;
-  sendSms(OWNER_PHONE,
-    'New booking: ' + b.name + ' - ' + b.service + ' on ' + when + (b.phone ? ' - ' + b.phone : ''));
+  // The owner is never texted about bookings — website bookings reach him
+  // by email only, and dashboard bookings do not notify him at all.
 }
 
 // ---------- Appointment reminders ----------
@@ -167,7 +166,7 @@ async function checkReminders() {
         const first = String(b.name || '').trim().split(/\s+/)[0] || 'there';
         console.log('Sending reminder for booking', b.id, b.date, b.time);
         const ok = await sendSms(normalizePhone(b.phone),
-          'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Surrey, BC. Change/cancel: (778) 344-2550');
+          'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Delta, BC. Change/cancel: (778) 344-2550');
         if (ok) { b.reminderSentAt = new Date().toISOString(); changed = true; }
       }
     }
@@ -360,7 +359,7 @@ const server = http.createServer(async (req, res) => {
     bookings.push(booking);
     saveBookings(bookings);
     sendBookingEmails(booking, authed);
-    sendBookingTexts(booking, authed);
+    sendBookingTexts(booking);
     return sendJson(res, 201, { ok: true, booking });
   }
 
