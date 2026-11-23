@@ -127,7 +127,7 @@ function sendBookingTexts(b, authed) {
   const when = b.date + ' at ' + b.time;
   if (b.phone) {
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change it? Call (778) 344-2550.');
+      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change or cancel? Call (778) 344-2550.');
   }
   // The owner is never texted about bookings — website bookings reach him
   // by email only, and dashboard bookings do not notify him at all.
