@@ -397,6 +397,7 @@ const server = http.createServer(async (req, res) => {
     if (!authed && !b.blockTime) {
       const digits = String(phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
       if (digits.length !== 10) return sendJson(res, 400, { error: 'A valid 10-digit phone number is required.' });
+      if (!email) return sendJson(res, 400, { error: 'An email address is required for your booking confirmation.' });
     }
     if (!allSlots().includes(time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
     const d = new Date(date + 'T12:00:00');
