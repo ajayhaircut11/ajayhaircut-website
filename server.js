@@ -222,6 +222,11 @@ const server = http.createServer(async (req, res) => {
     const email = String(b.email || '').trim().slice(0, 120);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { error: 'That email address does not look right.' });
     if ((!name && !b.blockTime) || !service || !date || !time) return sendJson(res, 400, { error: 'Name, service, date and time are required.' });
+    const authed = isAuthed(req);
+    if (!authed && !b.blockTime) {
+      const digits = String(phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+      if (digits.length !== 10) return sendJson(res, 400, { error: 'A valid 10-digit phone number is required.' });
+    }
     if (!SERVICES.includes(service)) return sendJson(res, 400, { error: 'Unknown service.' });
     if (!allSlots().includes(time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
     const d = new Date(date + 'T12:00:00');
@@ -234,7 +239,7 @@ const server = http.createServer(async (req, res) => {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
       phone: String(phone || '').slice(0, 30), email, service, date, time,
       notes: String(b.notes || '').slice(0, 300), blockedSlot: !!b.blockTime,
-      smsConsent: !!b.smsConsent, status: 'booked', createdAt: new Date().toISOString(),
+      smsConsent: authed ? !!b.smsConsent : true, status: 'booked', createdAt: new Date().toISOString(),
     };
     bookings.push(booking);
     saveBookings(bookings);
