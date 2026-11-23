@@ -278,8 +278,28 @@ function slotLabel(mins) {
 // own 15 minutes.
 function bookingSpan(b) {
   const start = slotMinutes(b.time);
-  const dur = b.blockedSlot ? (b.blockMinutes || 15) : (DURATIONS[b.service] || 30);
+  const dur = b.blockedSlot ? (b.blockMinutes || 15) : totalDuration(b);
   return { start, end: start + dur };
+}
+// A booking can hold several services at once (e.g. Haircut & Beard plus a
+// Facial): the appointment lasts the sum of their durations. Older bookings
+// only have the single `service` string; newer ones also carry `services`.
+function serviceListOf(b) {
+  if (b && Array.isArray(b.services) && b.services.length) return b.services;
+  return b && b.service ? [b.service] : [];
+}
+function totalDuration(b) {
+  const list = serviceListOf(b);
+  if (!list.length) return 30;
+  return list.reduce((sum, s) => sum + (DURATIONS[s] || 30), 0);
+}
+// Validate a requested service selection (array, or a single string for
+// older callers). Returns the cleaned list, or null if any entry is unknown.
+function parseServiceList(raw) {
+  const arr = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  const list = [...new Set(arr.map(s => String(s)))];
+  if (list.some(s => !SERVICES.includes(s))) return null;
+  return list;
 }
 function spansOverlap(aStart, aEnd, b) {
   const s = bookingSpan(b);
@@ -331,16 +351,19 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
     const b = await readBody(req);
-    const { name, phone, service, date, time } = b;
+    const { name, phone, date, time } = b;
     const email = String(b.email || '').trim().slice(0, 120);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJson(res, 400, { error: 'That email address does not look right.' });
-    if ((!name && !b.blockTime) || !service || !date || !time) return sendJson(res, 400, { error: 'Name, service, date and time are required.' });
+    let svcList = parseServiceList(b.services !== undefined ? b.services : b.service);
+    if (svcList === null) return sendJson(res, 400, { error: 'Unknown service.' });
+    if (b.blockTime && svcList.length === 0) svcList = ['Phone / Walk-in'];
+    if ((!name && !b.blockTime) || svcList.length === 0 || !date || !time) return sendJson(res, 400, { error: 'Name, service, date and time are required.' });
+    const service = svcList.join(' + ');
     const authed = isAuthed(req);
     if (!authed && !b.blockTime) {
       const digits = String(phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
       if (digits.length !== 10) return sendJson(res, 400, { error: 'A valid 10-digit phone number is required.' });
     }
-    if (!SERVICES.includes(service)) return sendJson(res, 400, { error: 'Unknown service.' });
     if (!allSlots().includes(time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
     const d = new Date(date + 'T12:00:00');
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
@@ -352,12 +375,12 @@ const server = http.createServer(async (req, res) => {
       blockMinutes = (bm >= 15 && bm <= 720 && bm % 15 === 0) ? bm : 15;
     }
     const nStart = slotMinutes(time);
-    const nEnd = nStart + (b.blockTime ? blockMinutes : (DURATIONS[service] || 30));
+    const nEnd = nStart + (b.blockTime ? blockMinutes : totalDuration({ services: svcList }));
     if (bookings.some(x => x.date === date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
       return sendJson(res, 409, { error: 'That time overlaps an existing booking. Please pick another time.' });
     const booking = {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
-      phone: String(phone || '').slice(0, 30), email, service, date, time,
+      phone: String(phone || '').slice(0, 30), email, service, services: svcList, date, time,
       notes: String(b.notes || '').slice(0, 300), blockedSlot: !!b.blockTime, blockMinutes,
       smsConsent: authed ? !!b.smsConsent : true, status: 'booked', createdAt: new Date().toISOString(),
     };
@@ -416,9 +439,16 @@ const server = http.createServer(async (req, res) => {
       email: b.email !== undefined ? String(b.email).trim().slice(0, 120) : (cur.email || ''),
       notes: b.notes !== undefined ? String(b.notes).slice(0, 300) : (cur.notes || ''),
       service: b.service !== undefined ? b.service : cur.service,
+      services: Array.isArray(cur.services) ? cur.services : undefined,
       date: b.date !== undefined ? b.date : cur.date,
       time: b.time !== undefined ? b.time : cur.time,
     };
+    if (b.services !== undefined || b.service !== undefined) {
+      const list = parseServiceList(b.services !== undefined ? b.services : b.service);
+      if (list === null) return sendJson(res, 400, { error: 'Unknown service.' });
+      if (list.length) { next.services = list; next.service = list.join(' + '); }
+    }
+    if (!Array.isArray(next.services)) next.services = next.service ? [next.service] : [];
     if (next.blockedSlot) {
       next.name = 'Blocked';
       if (b.blockMinutes !== undefined) {
@@ -427,7 +457,6 @@ const server = http.createServer(async (req, res) => {
       } else if (!next.blockMinutes) next.blockMinutes = 15;
     } else next.blockMinutes = null;
     if ((!next.name && !next.blockedSlot) || !next.service || !next.date || !next.time) return sendJson(res, 400, { error: 'Name, service, date and time are required.' });
-    if (!SERVICES.includes(next.service)) return sendJson(res, 400, { error: 'Unknown service.' });
     if (!allSlots().includes(next.time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
     const d = new Date(next.date + 'T12:00:00');
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
@@ -436,7 +465,7 @@ const server = http.createServer(async (req, res) => {
     // service — older bookings may already overlap and must stay editable.
     if (next.date !== cur.date || next.time !== cur.time || next.service !== cur.service || next.blockedSlot !== !!cur.blockedSlot || (next.blockMinutes || null) !== (cur.blockMinutes || null)) {
       const nStart = slotMinutes(next.time);
-      const nEnd = nStart + (next.blockedSlot ? (next.blockMinutes || 15) : (DURATIONS[next.service] || 30));
+      const nEnd = nStart + (next.blockedSlot ? (next.blockMinutes || 15) : totalDuration(next));
       if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
         return sendJson(res, 409, { error: 'That slot is already taken.' });
     }
