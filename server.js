@@ -346,7 +346,12 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/availability' && req.method === 'GET') {
     const date = url.searchParams.get('date') || '';
     const taken = takenSlots(date);
-    return sendJson(res, 200, { date, slots: allSlots(), taken, blocked: loadBlocked().includes(date) });
+    // Booked spans (start/end in minutes) let the booking form grey out any
+    // start time whose service duration would run into the next appointment.
+    const spans = loadBookings()
+      .filter(b => b.date === date && b.status === 'booked')
+      .map(b => { const s = bookingSpan(b); return { start: s.start, end: s.end }; });
+    return sendJson(res, 200, { date, slots: allSlots(), taken, spans, blocked: loadBlocked().includes(date) });
   }
 
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
@@ -504,7 +509,12 @@ const server = http.createServer(async (req, res) => {
   const filePath = path.join(PUBLIC_DIR, path.normalize(file).replace(/^(\.\.[\/\\])+/, ''));
   fs.readFile(filePath, (err, content) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+    const ext = path.extname(filePath);
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+    // HTML pages must never be served from a stale phone/browser cache —
+    // the booking form changes often and an old copy breaks bookings.
+    if (ext === '.html') headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    res.writeHead(200, headers);
     res.end(content);
   });
 });
