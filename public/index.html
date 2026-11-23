@@ -126,8 +126,8 @@
   input,select{width:100%;padding:16px 15px;border-radius:10px;border:1px solid #33333a;background:#0d0d10;color:var(--text);font-size:17px;font-family:'Inter',sans-serif;transition:.2s}
   input:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(198,161,91,.18)}
   .svcbox{display:grid;gap:8px;margin-top:6px}
-  .svc{display:flex;align-items:center;gap:11px;padding:13px 14px;border:1px solid #33333a;border-radius:10px;background:#0d0d10;cursor:pointer;font-size:16px;text-transform:none;letter-spacing:0;margin:0;color:var(--text);font-weight:500}
-  .svc input{width:20px;height:20px;accent-color:var(--gold);flex:none;margin:0;padding:0}
+  .svc{display:flex;align-items:center;gap:12px;padding:16px 15px;border:1px solid #33333a;border-radius:10px;background:#0d0d10;cursor:pointer;font-size:19px;text-transform:none;letter-spacing:0;margin:0;color:var(--text);font-weight:500}
+  .svc input{width:23px;height:23px;accent-color:var(--gold);flex:none;margin:0;padding:0}
   .svc .mins{margin-left:auto;color:var(--muted);font-size:13.5px;white-space:nowrap}
   .svc:has(input:checked){border-color:var(--gold);background:#171307}
   .svctotal{margin-top:9px;color:var(--gold-2);font-size:15px;font-weight:600;min-height:20px}
@@ -287,17 +287,16 @@
         <div class="step">Step 1 · Service &amp; time</div>
         <label>Service — choose one or more</label>
         <div class="svcbox" id="svcBox">
-          <label class="svc"><input type="checkbox" value="Haircut & Beard"><span>Haircut &amp; Beard</span><span class="mins">45 min</span></label>
-          <label class="svc"><input type="checkbox" value="Skin Fade"><span>Skin Fade</span><span class="mins">30 min</span></label>
-          <label class="svc"><input type="checkbox" value="Beard Trim and Threading"><span>Beard Trim and Threading</span><span class="mins">30 min</span></label>
-          <label class="svc"><input type="checkbox" value="Men's Haircut"><span>Men's Haircut</span><span class="mins">30 min</span></label>
-          <label class="svc"><input type="checkbox" value="Beard Trim"><span>Beard Trim</span><span class="mins">15 min</span></label>
-          <label class="svc"><input type="checkbox" value="Styling / Wash"><span>Styling / Wash</span><span class="mins">20 min</span></label>
-          <label class="svc"><input type="checkbox" value="Hair Perm"><span>Hair Perm</span><span class="mins">2 hours</span></label>
-          <label class="svc"><input type="checkbox" value="Beard Perm"><span>Beard Perm</span><span class="mins">30 min</span></label>
-          <label class="svc"><input type="checkbox" value="Men's Facial"><span>Men's Facial</span><span class="mins">45 min</span></label>
+          <label class="svc"><input type="checkbox" value="Haircut & Beard"><span>Haircut &amp; Beard</span></label>
+          <label class="svc"><input type="checkbox" value="Skin Fade"><span>Skin Fade</span></label>
+          <label class="svc"><input type="checkbox" value="Beard Trim and Threading"><span>Beard Trim and Threading</span></label>
+          <label class="svc"><input type="checkbox" value="Men's Haircut"><span>Men's Haircut</span></label>
+          <label class="svc"><input type="checkbox" value="Beard Trim"><span>Beard Trim</span></label>
+          <label class="svc"><input type="checkbox" value="Styling / Wash"><span>Styling / Wash</span></label>
+          <label class="svc"><input type="checkbox" value="Hair Perm"><span>Hair Perm</span></label>
+          <label class="svc"><input type="checkbox" value="Beard Perm"><span>Beard Perm</span></label>
+          <label class="svc"><input type="checkbox" value="Men's Facial"><span>Men's Facial</span></label>
         </div>
-        <div class="svctotal" id="svcTotal"></div>
         <label for="date">Date</label>
         <input type="date" id="date" required>
         <label>Time</label>
@@ -467,7 +466,6 @@
     const f = document.getElementById('bookForm');
     f.reset(); f.style.display = '';
     document.querySelectorAll('#svcBox input').forEach(i => { i.checked = false; });
-    document.getElementById('svcTotal').textContent = '';
     selectedTime = null;
     loadedDate = null;
     daySlots = []; daySpans = [];
@@ -483,18 +481,10 @@
 </script>
 <script>
   // "Book this" on a service card: preselect the service and jump to the form
-  const DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 120, 'Beard Perm': 30, "Men's Facial": 45 };
-  function fmtDur(m) { return m >= 60 ? Math.floor(m / 60) + ' hr' + (m % 60 ? ' ' + (m % 60) + ' min' : '') : m + ' min'; }
-  function updTotal() {
-    const sel = [...document.querySelectorAll('#svcBox input:checked')].map(i => i.value);
-    document.getElementById('svcTotal').textContent = sel.length ? 'Total time: ' + fmtDur(sel.reduce((s, v) => s + (DUR[v] || 30), 0)) : '';
-  }
-  document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', updTotal));
   document.querySelectorAll('.booksvc').forEach(btn => {
     btn.addEventListener('click', () => {
       const name = btn.getAttribute('data-service');
       document.querySelectorAll('#svcBox input').forEach(i => { i.checked = i.value === name; });
-      updTotal();
       document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
     });
   });
