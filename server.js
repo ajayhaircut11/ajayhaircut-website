@@ -191,6 +191,33 @@ function sendCancellationNotice(b) {
   else { if (!emailIt()) textIt(); }
 }
 
+// Reschedule notices use the same channel rule as cancellations: online
+// customers are emailed, dashboard customers are texted, with the other
+// channel as fallback. Fires only when the date or time actually changed.
+function sendRescheduleNotice(b, oldDate, oldTime) {
+  if (b.blockedSlot) return;
+  const emailIt = () => {
+    if (!b.email || !BREVO_API_KEY) return false;
+    sendEmail(b.email,
+      'Appointment Rescheduled: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
+      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been rescheduled.\n\nService: ' + b.service + '\nWas: ' + oldDate + ' at ' + oldTime + '\nNow: ' + b.date + ' at ' + b.time + '\n\nQuestions? Call us at (778) 344-2550.\n',
+      bookingEmailHtml('APPOINTMENT RESCHEDULED', 'Your appointment has been moved', [
+        ['Service', esc(b.service)],
+        ['Was', esc(oldDate) + ' at ' + esc(oldTime)],
+        ['Now', esc(b.date) + ' at ' + esc(b.time)],
+      ], ['Questions? Call (778) 344-2550']));
+    return true;
+  };
+  const textIt = () => {
+    if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
+    sendSms(normalizePhone(b.phone),
+      'Hi ' + b.name + ', your appointment at Ajay Haircut has been rescheduled to ' + b.date + ' at ' + b.time + ' (' + b.service + '). Questions? Call (778) 344-2550.');
+    return true;
+  };
+  if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
+  else { if (!emailIt()) textIt(); }
+}
+
 async function sendReminderEmail(b) {
   if (!b.email) return false;
   const first = String(b.name || '').trim().split(/\s+/)[0] || 'there';
@@ -538,7 +565,12 @@ const server = http.createServer(async (req, res) => {
       if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
         return sendJson(res, 409, { error: 'That slot is already taken.' });
     }
+    const oldDate = cur.date, oldTime = cur.time;
     Object.assign(cur, next);
+    if ((oldDate !== cur.date || oldTime !== cur.time) && cur.status === 'booked' && !cur.blockedSlot) {
+      cur.reminderSentAt = null; // re-arm the 2-hour reminder for the new slot
+      sendRescheduleNotice(cur, oldDate, oldTime);
+    }
     saveBookings(bookings);
     return sendJson(res, 200, { ok: true, booking: cur });
   }
