@@ -212,6 +212,7 @@
     <div class="grid">
       <div class="card reveal"><div class="icon">👑</div><h3>Haircut &amp; Beard</h3><div class="price">$45</div><p>Complete refresh — a sharp cut paired with a shaped beard.</p><button class="booksvc" data-service="Haircut &amp; Beard">Book this →</button></div>
       <div class="card reveal"><div class="icon">💈</div><h3>Skin Fades</h3><div class="price">$25</div><p>Seamless, sharp fades blended to perfection.</p><button class="booksvc" data-service="Skin Fade">Book this →</button></div>
+      <div class="card reveal"><div class="icon">🧵</div><h3>Beard Trim &amp; Threading</h3><p>Beard trim paired with precise threading for extra-clean edges and a crisp, defined finish.</p><button class="booksvc" data-service="Beard Trim and Threading">Book this →</button></div>
       <div class="card reveal"><div class="icon">✂️</div><h3>Men's Haircuts</h3><div class="price">$25</div><p>Precision cuts tailored to your face shape and lifestyle.</p><button class="booksvc" data-service="Men's Haircut">Book this →</button></div>
       <div class="card reveal"><div class="icon">🧔</div><h3>Beard Trim</h3><div class="price">$20</div><p>Clean beard trim with precise threading, shaping, lining and hot-towel detailing for a crisp finish.</p><button class="booksvc" data-service="Beard Trim">Book this →</button></div>
       <div class="card reveal"><div class="icon">✨</div><h3>Styling / Wash</h3><div class="price">$20</div><p>Wash and styling for a clean, finished look.</p><button class="booksvc" data-service="Styling / Wash">Book this →</button></div>
@@ -312,6 +313,14 @@
         <button class="btn" type="submit" style="width:100%;padding:16px;">Confirm Booking</button>
         <div class="msg" id="formMsg"></div>
       </form>
+      <div id="thanksPanel" style="display:none;text-align:center;padding:30px 6px;">
+        <div style="font-size:54px;line-height:1;">✅</div>
+        <h3 class="serif" id="thanksTitle" style="font-size:29px;margin:14px 0 6px;">Thanks for booking!</h3>
+        <p style="color:var(--muted);margin-bottom:20px;">Your appointment is confirmed — your confirmation has been sent by email and text message.</p>
+        <div id="thanksSummary" style="text-align:left;max-width:350px;margin:0 auto 20px;"></div>
+        <p style="color:var(--muted);font-size:14.5px;line-height:1.6;">Ajay Haircut · Unit 102, 9385 120 St, Delta, BC<br>Need to change or cancel? Call <a href="tel:+17783442550">(778) 344-2550</a></p>
+        <button class="btn" id="bookAnother" type="button" style="padding:14px 30px;margin-top:18px;">Book another appointment</button>
+      </div>
     </div>
   </div>
 </section>
@@ -383,6 +392,7 @@
     });
   });
 
+  const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 120, 'Beard Perm': 30, "Men's Facial": 45 };
   document.getElementById('bookForm').addEventListener('submit', async (e) => {
     e.preventDefault(); msgEl.textContent = ''; msgEl.className = 'msg';
     if (!selectedTime) { msgEl.textContent = 'Please pick a time.'; msgEl.classList.add('err'); return; }
@@ -398,13 +408,35 @@
     const r = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await r.json();
     if (r.ok) {
-      msgEl.innerHTML = '✅ Booked! ' + svcChecked.join(' + ') + ' on ' + payload.date + ' at ' + payload.time + '. See you soon!';
-      msgEl.classList.add('ok');
-      dateInput.dispatchEvent(new Event('change'));
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const first = payload.name.split(' ')[0];
+      document.getElementById('thanksTitle').textContent = 'Thanks for booking' + (first ? ', ' + first : '') + '!';
+      const niceDate = new Date(payload.date + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      const total = svcChecked.reduce((s, v) => s + (SVC_DUR[v] || 30), 0);
+      const row = (k, v) => '<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 2px;border-bottom:1px solid #26262c;"><span style="color:var(--muted);">' + k + '</span><b style="text-align:right;">' + v + '</b></div>';
+      document.getElementById('thanksSummary').innerHTML =
+        row('Service', esc(svcChecked.join(' + '))) + row('Date', esc(niceDate)) + row('Time', esc(payload.time)) +
+        row('Duration', total >= 60 ? Math.floor(total / 60) + ' hr' + (total % 60 ? ' ' + (total % 60) + ' min' : '') : total + ' min');
+      document.getElementById('bookForm').style.display = 'none';
+      const tp = document.getElementById('thanksPanel');
+      tp.style.display = 'block';
+      tp.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
       msgEl.textContent = data.error || 'Something went wrong. Please call (778) 344-2550.';
       msgEl.classList.add('err');
     }
+  });
+
+  document.getElementById('bookAnother').addEventListener('click', () => {
+    document.getElementById('thanksPanel').style.display = 'none';
+    const f = document.getElementById('bookForm');
+    f.reset(); f.style.display = '';
+    document.querySelectorAll('#svcBox input').forEach(i => { i.checked = false; });
+    document.getElementById('svcTotal').textContent = '';
+    selectedTime = null;
+    msgEl.textContent = ''; msgEl.className = 'msg';
+    dateInput.dispatchEvent(new Event('change'));
+    document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
   });
 
   // Gentle fade-up animation as sections scroll into view
