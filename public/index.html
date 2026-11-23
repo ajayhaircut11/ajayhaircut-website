@@ -424,7 +424,7 @@
     renderSlots();
   });
 
-  const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 120, 'Beard Perm': 30, "Men's Facial": 45 };
+  const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
   document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); }));
   document.getElementById('bookForm').addEventListener('submit', async (e) => {
     e.preventDefault(); msgEl.textContent = ''; msgEl.className = 'msg';
