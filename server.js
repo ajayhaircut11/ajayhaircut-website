@@ -206,7 +206,7 @@ const server = http.createServer(async (req, res) => {
   // ---------- API ----------
   if (url.pathname === '/api/availability' && req.method === 'GET') {
     const date = url.searchParams.get('date') || '';
-    const taken = loadBookings().filter(b => b.date === date && b.status !== 'cancelled').map(b => b.time);
+    const taken = loadBookings().filter(b => b.date === date && b.status === 'booked').map(b => b.time);
     return sendJson(res, 200, { date, slots: allSlots(), taken, blocked: loadBlocked().includes(date) });
   }
 
@@ -222,7 +222,7 @@ const server = http.createServer(async (req, res) => {
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
     if (loadBlocked().includes(date)) return sendJson(res, 400, { error: 'We are closed on this day. Please pick another day.' });
     const bookings = loadBookings();
-    if (bookings.some(x => x.date === date && x.time === time && x.status !== 'cancelled'))
+    if (bookings.some(x => x.date === date && x.time === time && x.status === 'booked'))
       return sendJson(res, 409, { error: 'That slot was just taken. Please pick another time.' });
     const booking = {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
@@ -296,11 +296,24 @@ const server = http.createServer(async (req, res) => {
     const d = new Date(next.date + 'T12:00:00');
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
     if (loadBlocked().includes(next.date)) return sendJson(res, 400, { error: 'That day is blocked.' });
-    if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.time === next.time && x.status !== 'cancelled'))
+    if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.time === next.time && x.status === 'booked'))
       return sendJson(res, 409, { error: 'That slot is already taken.' });
     Object.assign(cur, next);
     saveBookings(bookings);
     return sendJson(res, 200, { ok: true, booking: cur });
+  }
+
+  const statusMatch = url.pathname.match(/^\/api\/bookings\/(.+)\/status$/);
+  if (statusMatch && req.method === 'POST') {
+    if (!isAuthed(req)) return sendJson(res, 401, { error: 'Login required.' });
+    const b = await readBody(req);
+    if (!['booked', 'cancelled', 'completed'].includes(b.status)) return sendJson(res, 400, { error: 'Bad status.' });
+    const bookings = loadBookings();
+    const bk = bookings.find(x => x.id === statusMatch[1]);
+    if (!bk) return sendJson(res, 404, { error: 'Booking not found.' });
+    bk.status = b.status;
+    saveBookings(bookings);
+    return sendJson(res, 200, { ok: true, booking: bk });
   }
 
   const delMatch = url.pathname.match(/^\/api\/bookings\/(.+)$/);
