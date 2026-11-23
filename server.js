@@ -62,7 +62,7 @@ function normalizePhone(p) {
   return '';
 }
 async function sendSms(to, body) {
-  if (!to) return;
+  if (!to) return false;
   try {
     const res = await fetch('https://api.twilio.com/2010-04-01/Accounts/' + TWILIO_SID + '/Messages.json', {
       method: 'POST',
@@ -72,8 +72,9 @@ async function sendSms(to, body) {
       },
       body: new URLSearchParams({ From: TWILIO_FROM, To: to, Body: body }),
     });
-    if (!res.ok) console.error('SMS failed:', res.status, (await res.text()).slice(0, 200));
-  } catch (e) { console.error('SMS failed:', e.message); }
+    if (!res.ok) { console.error('SMS failed:', res.status, (await res.text()).slice(0, 200)); return false; }
+    return true;
+  } catch (e) { console.error('SMS failed:', e.message); return false; }
 }
 function sendBookingTexts(b) {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || b.blockedSlot) return;
@@ -86,6 +87,53 @@ function sendBookingTexts(b) {
     sendSms(OWNER_PHONE,
       'New booking: ' + b.name + ' - ' + b.service + ' on ' + when + (b.phone ? ' - ' + b.phone : ''));
   }
+}
+
+// ---------- Appointment reminders ----------
+// A reminder text goes out 2 hours before each appointment (shop timezone),
+// in the exact format the owner asked for. Runs every 5 minutes while the
+// service is awake; each booking is reminded at most once.
+const SHOP_TZ = 'America/Vancouver';
+// Vancouver offset from UTC, computed from the DST rules directly (second
+// Sunday of March 2:00 AM -> first Sunday of November 2:00 AM = PDT, UTC-7;
+// otherwise PST, UTC-8) so it never depends on the host's timezone database.
+function vancouverOffsetMs(y, mo, da, mins) {
+  const nthSunday = (yy, mm, n) => { const first = new Date(Date.UTC(yy, mm - 1, 1)).getUTCDay(); return 1 + ((7 - first) % 7) + (n - 1) * 7; };
+  const startDay = nthSunday(y, 3, 2), endDay = nthSunday(y, 11, 1);
+  let dst;
+  if (mo < 3 || mo > 11) dst = false;
+  else if (mo > 3 && mo < 11) dst = true;
+  else if (mo === 3) dst = da > startDay || (da === startDay && mins >= 120);
+  else dst = da < endDay || (da === endDay && mins < 120);
+  return (dst ? 7 : 8) * 60 * 60 * 1000;
+}
+function shopInstant(dateStr, timeStr) {
+  const [y, mo, da] = String(dateStr).split('-').map(Number);
+  const mins = slotMinutes(timeStr);
+  return Date.UTC(y, mo - 1, da, Math.floor(mins / 60), mins % 60) + vancouverOffsetMs(y, mo, da, mins);
+}
+let reminderCheckRunning = false;
+async function checkReminders() {
+  if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || reminderCheckRunning) return;
+  reminderCheckRunning = true;
+  try {
+    const now = Date.now();
+    const bookings = loadBookings();
+    let changed = false;
+    for (const b of bookings) {
+      if (b.status !== 'booked' || b.blockedSlot || !b.phone || b.reminderSentAt) continue;
+      const diff = shopInstant(b.date, b.time) - now;
+      if (diff > 0 && diff <= 2 * 60 * 60 * 1000) {
+        const first = String(b.name || '').trim().split(/\s+/)[0] || 'there';
+        console.log('Sending reminder for booking', b.id, b.date, b.time);
+        const ok = await sendSms(normalizePhone(b.phone),
+          'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Surrey, BC. Change/cancel: (778) 344-2550');
+        if (ok) { b.reminderSentAt = new Date().toISOString(); changed = true; }
+      }
+    }
+    if (changed) saveBookings(bookings);
+  } catch (e) { console.error('Reminder check failed:', e.message); }
+  reminderCheckRunning = false;
 }
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -349,4 +397,6 @@ const server = http.createServer(async (req, res) => {
 
 initStore().then(() => {
   server.listen(PORT, () => console.log(`Ajay Haircut site running on http://localhost:${PORT}`));
+  checkReminders();
+  setInterval(checkReminders, 5 * 60 * 1000);
 });
