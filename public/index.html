@@ -212,7 +212,7 @@
     <p class="sub reveal">From razor-sharp skin fades to relaxing men's facials — every service is delivered with precision and care. All facial treatments are for men only.</p>
     <div class="grid">
       <div class="card reveal"><div class="icon">👑</div><h3>Haircut &amp; Beard</h3><div class="price">$45</div><p>Complete refresh — a sharp cut paired with a shaped beard.</p><button class="booksvc" data-service="Haircut &amp; Beard">Book this →</button></div>
-      <div class="card reveal"><div class="icon">💈</div><h3>Skin Fades</h3><div class="price">$25</div><p>Seamless, sharp fades blended to perfection.</p><button class="booksvc" data-service="Skin Fade">Book this →</button></div>
+      <div class="card reveal"><div class="icon">💈</div><h3>Head Massage</h3><p>A relaxing massage that melts away stress.</p><button class="booksvc" data-service="Head Massage">Book this →</button></div>
       <div class="card reveal"><div class="icon">🔥</div><h3>Beard Perms</h3><div class="price">$120</div><p>Curl and shape your beard for fuller, styled definition.</p><button class="booksvc" data-service="Beard Perm">Book this →</button></div>
       <div class="card reveal"><div class="icon">🧵</div><h3>Beard Trim &amp; Threading</h3><p>Beard trim paired with precise threading for extra-clean edges and a crisp, defined finish.</p><button class="booksvc" data-service="Beard Trim and Threading">Book this →</button></div>
       <div class="card reveal"><div class="icon">✂️</div><h3>Men's Haircuts</h3><div class="price">$25</div><p>Precision cuts tailored to your face shape and lifestyle.</p><button class="booksvc" data-service="Men's Haircut">Book this →</button></div>
@@ -276,7 +276,7 @@
         <label>Service — choose one or more</label>
         <div class="svcbox" id="svcBox">
           <label class="svc"><input type="checkbox" value="Haircut & Beard"><span>Haircut &amp; Beard</span></label>
-          <label class="svc"><input type="checkbox" value="Skin Fade"><span>Skin Fade</span></label>
+          <label class="svc"><input type="checkbox" value="Head Massage"><span>Head Massage</span></label>
           <label class="svc"><input type="checkbox" value="Beard Trim and Threading"><span>Beard Trim and Threading</span></label>
           <label class="svc"><input type="checkbox" value="Men's Haircut"><span>Men's Haircut</span></label>
           <label class="svc"><input type="checkbox" value="Beard Trim"><span>Beard Trim</span></label>
@@ -414,7 +414,7 @@
     renderSlots();
   });
 
-  const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Face Scrub': 15, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
+  const SVC_DUR = { 'Haircut & Beard': 45, 'Head Massage': 15, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Face Scrub': 15, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
   document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); }));
   // Returning customers: name/phone/email are saved on their own device
   // after a booking and prefilled next time, so they don't retype them.
