@@ -40,10 +40,11 @@ function esc(s) {
 }
 // Branded booking email in the old site's design: dark header card with a
 // gold eyebrow line, then label/value rows.
-function bookingEmailHtml(eyebrow, title, rows, footerLines) {
+function bookingEmailHtml(eyebrow, title, rows, footerLines, strikeRows) {
+  const strike = strikeRows ? 'text-decoration:line-through;' : '';
   const rowHtml = rows.map(r =>
-    '<tr><td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#8a8f9c;font-size:15px;">' + esc(r[0]) + '</td>' +
-    '<td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#141a29;font-size:15px;font-weight:700;text-align:right;">' + r[1] + '</td></tr>').join('');
+    '<tr><td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#8a8f9c;font-size:15px;' + strike + '">' + esc(r[0]) + '</td>' +
+    '<td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#141a29;font-size:15px;font-weight:700;text-align:right;' + strike + '">' + r[1] + '</td></tr>').join('');
   const foot = (footerLines || []).map(l =>
     '<div style="color:#8a8f9c;font-size:15px;line-height:1.5;text-align:center;">' + l + '</div>').join('');
   return '<div style="margin:0;padding:24px 12px;background:#f4f2ed;font-family:Arial,Helvetica,sans-serif;">' +
@@ -179,7 +180,7 @@ function sendCancellationNotice(b) {
         ['Service', esc(b.service)],
         ['Date', esc(b.date)],
         ['Time', esc(b.time)],
-      ], [hasBeardPerm(b) ? 'To rebook, call (778) 344-2550' : 'To rebook, call (778) 344-2550 or visit ajayhaircut.com']));
+      ], [hasBeardPerm(b) ? 'To rebook, call (778) 344-2550' : 'To rebook, call (778) 344-2550 or visit ajayhaircut.com'], true));
     return true;
   };
   const textIt = () => {
