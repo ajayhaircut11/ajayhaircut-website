@@ -217,7 +217,7 @@
       <div class="card reveal"><div class="icon">🧵</div><h3>Beard Trim &amp; Threading</h3><p>Beard trim paired with precise threading for extra-clean edges and a crisp, defined finish.</p><button class="booksvc" data-service="Beard Trim and Threading">Book this →</button></div>
       <div class="card reveal"><div class="icon">✂️</div><h3>Men's Haircuts</h3><div class="price">$25</div><p>Precision cuts tailored to your face shape and lifestyle.</p><button class="booksvc" data-service="Men's Haircut">Book this →</button></div>
       <div class="card reveal"><div class="icon">🧔</div><h3>Beard Trim</h3><p>Clean beard trim with precise threading, shaping, lining and hot-towel detailing for a crisp finish.</p><button class="booksvc" data-service="Beard Trim">Book this →</button></div>
-      <div class="card reveal"><div class="icon">✨</div><h3>Styling / Wash</h3><div class="price">$20</div><p>Wash and styling for a clean, finished look.</p><button class="booksvc" data-service="Styling / Wash">Book this →</button></div>
+      <div class="card reveal"><div class="icon">✨</div><h3>Face Scrub</h3><p>A refreshing scrub for clean, smooth, healthy skin.</p><button class="booksvc" data-service="Face Scrub">Book this →</button></div>
       <div class="card reveal"><div class="icon">🌀</div><h3>Hair Perms</h3><div class="price">$120</div><p>Add lasting texture, curl and volume to your hair.</p><button class="booksvc" data-service="Hair Perm">Book this →</button></div>
       <div class="card reveal"><div class="icon">🧖</div><h3>Men's Facial Treatments</h3><div class="price"><small>from</small> $50</div><p>Deep-cleansing facials designed for men's skin. Men only.</p><button class="booksvc" data-service="Men's Facial">Book this →</button></div>
     </div>
@@ -280,7 +280,7 @@
           <label class="svc"><input type="checkbox" value="Beard Trim and Threading"><span>Beard Trim and Threading</span></label>
           <label class="svc"><input type="checkbox" value="Men's Haircut"><span>Men's Haircut</span></label>
           <label class="svc"><input type="checkbox" value="Beard Trim"><span>Beard Trim</span></label>
-          <label class="svc"><input type="checkbox" value="Styling / Wash"><span>Styling / Wash</span></label>
+          <label class="svc"><input type="checkbox" value="Face Scrub"><span>Face Scrub</span></label>
           <label class="svc"><input type="checkbox" value="Hair Perm"><span>Hair Perm</span></label>
           <label class="svc"><input type="checkbox" value="Beard Perm"><span>Beard Perm</span></label>
           <label class="svc"><input type="checkbox" value="Men's Facial"><span>Men's Facial</span></label>
@@ -414,7 +414,7 @@
     renderSlots();
   });
 
-  const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Styling / Wash': 20, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
+  const SVC_DUR = { 'Haircut & Beard': 45, 'Skin Fade': 30, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Face Scrub': 15, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
   document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); }));
   // Returning customers: name/phone/email are saved on their own device
   // after a booking and prefilled next time, so they don't retype them.
