@@ -45,7 +45,7 @@ function bookingEmailHtml(eyebrow, title, rows, footerLines) {
     '<tr><td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#8a8f9c;font-size:15px;">' + esc(r[0]) + '</td>' +
     '<td style="padding:13px 28px;border-bottom:1px solid #eceae4;color:#141a29;font-size:15px;font-weight:700;text-align:right;">' + r[1] + '</td></tr>').join('');
   const foot = (footerLines || []).map(l =>
-    '<div style="color:#8a8f9c;font-size:13.5px;line-height:1.5;text-align:center;">' + l + '</div>').join('');
+    '<div style="color:#8a8f9c;font-size:15px;line-height:1.5;text-align:center;">' + l + '</div>').join('');
   return '<div style="margin:0;padding:24px 12px;background:#f4f2ed;font-family:Arial,Helvetica,sans-serif;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e6e2d9;">' +
     '<tr><td style="background:#0d1526;padding:34px 28px 30px;">' +
@@ -60,7 +60,7 @@ function bookingEmailHtml(eyebrow, title, rows, footerLines) {
 // only, and the customer by email only. Dashboard bookings notify NOBODY
 // except the customer — and only by text, only when a phone was filled in.
 const PERM_INSTRUCTIONS_TEXT = 'Beard Perm - before your appointment:\n- Before coming, wash your beard thoroughly with shampoo.\n- Come with a clean, dry beard - do not apply beard oil, balm or wax that day.\n- Any other questions? Call (778) 344-2550.';
-const PERM_INSTRUCTIONS_HTML = '<div style="text-align:left;color:#141a29;font-size:14px;line-height:1.6;"><b>Beard Perm \u2014 before your appointment:</b><br>\u2022 Before coming, wash your beard thoroughly with shampoo.<br>\u2022 Come with a clean, dry beard \u2014 no beard oil, balm or wax that day.<br>\u2022 Any other questions? Call (778) 344-2550.</div>';
+const PERM_INSTRUCTIONS_HTML = '<div style="text-align:left;color:#141a29;font-size:15px;line-height:1.6;"><b>Beard Perm \u2014 before your appointment:</b><br>\u2022 Before coming, wash your beard thoroughly with shampoo.<br>\u2022 Come with a clean, dry beard \u2014 no beard oil, balm or wax that day.<br>\u2022 Any other questions? Call (778) 344-2550.</div>';
 function hasBeardPerm(b) { const list = Array.isArray(b.services) && b.services.length ? b.services : [b.service]; return list.includes('Beard Perm'); }
 function sendBookingEmails(b, fromDashboard) {
   if (!BREVO_API_KEY) return;
@@ -231,7 +231,7 @@ async function sendReminderEmail(b) {
     + '<div style="color:#c9a227;font-size:11px;font-weight:700;letter-spacing:3px;">APPOINTMENT REMINDER</div>'
     + '<div style="color:#ffffff;font-size:22px;font-weight:700;margin-top:6px;">See you soon, ' + esc(first) + '</div></div>'
     + '<div style="padding:20px 26px 24px;">' + rows
-    + '<p style="color:#55555e;font-size:14px;line-height:1.6;margin:16px 0 0;">Unit 102, 9385 120 St, Delta, BC<br>Need to change or cancel? Call <b>(778) 344-2550</b>.' + (hasBeardPerm(b) ? '' : ' Book online: <b>ajayhaircut.com</b>') + '</p>'
+    + '<p style="color:#55555e;font-size:15px;line-height:1.6;margin:16px 0 0;">Unit 102, 9385 120 St, Delta, BC<br>Need to change or cancel? Call <b>(778) 344-2550</b>.' + (hasBeardPerm(b) ? '' : ' Book online: <b>ajayhaircut.com</b>') + '</p>'
     + '</div></div></div>';
   return sendEmail(b.email, subject, text, html);
 }
