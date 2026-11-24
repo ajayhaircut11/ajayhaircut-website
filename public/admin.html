@@ -65,6 +65,7 @@
   .ttime { font-weight:800; font-size:15.5px; white-space:nowrap; }
   .tdur { color:var(--muted); font-size:12.5px; margin-top:3px; }
   .tnote { color:var(--muted); font-size:12.5px; margin-top:3px; max-width:170px; }
+  .tbooked { color:var(--muted); font-size:12.5px; margin-top:3px; }
   .editbtn { background:none; border:none; color:var(--navy); font-weight:700; font-size:14.5px; cursor:pointer; padding:2px 4px; }
   .editbtn:hover { color:var(--gold-dark); }
   tr.cancelled td { color:var(--muted); text-decoration:line-through; }
@@ -305,12 +306,23 @@
     const durMin = b.blockedSlot ? (b.blockMinutes || 15) : (Array.isArray(b.services) && b.services.length ? b.services : [b.service]).reduce((s2, sv) => s2 + (durations[sv] || 30), 0);
     const dur = durMin ? '<div class="tdur">' + durMin + ' min</div>' : '';
     const note = b.notes ? '<div class="tnote">' + esc(b.notes) + '</div>' : '';
+    let bookedLine = '';
+    if (!b.blockedSlot && (b.createdAt || b.source)) {
+      const parts = [];
+      if (b.createdAt) {
+        const dt = new Date(b.createdAt);
+        if (!isNaN(dt)) parts.push('Booked ' + dt.toLocaleString('en-CA', { timeZone: 'America/Vancouver', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
+      }
+      if (b.source === 'online') parts.push('Online');
+      else if (b.source === 'dashboard') parts.push('Self');
+      if (parts.length) bookedLine = '<div class="tbooked">' + parts.join(' · ') + '</div>';
+    }
     const tag = b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : b.status === 'completed' ? '<span class="tag">Completed</span>' : '';
     const nameHtml = b.blockedSlot
       ? '<span style="color:var(--red);font-weight:700;">Blocked</span>'
       : esc(b.name) + tag;
     tr.innerHTML = '<td><div class="ttime">' + esc(b.time) + '</div>' + dur + '</td>' +
-      '<td>' + nameHtml + note + '</td>' +
+      '<td>' + nameHtml + note + bookedLine + '</td>' +
       '<td>' + (b.blockedSlot ? '—' : esc(b.service)) + '</td>' +
       '<td>' + esc(b.phone || 'N/A') + '</td>';
     tr.appendChild(actionCell(b));
