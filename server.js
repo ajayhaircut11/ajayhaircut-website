@@ -646,15 +646,35 @@ const server = http.createServer(async (req, res) => {
   let file = url.pathname === '/' ? '/index.html' : url.pathname;
   if (file === '/admin') file = '/admin.html';
   const filePath = path.join(PUBLIC_DIR, path.normalize(file).replace(/^(\.\.[\/\\])+/, ''));
-  fs.readFile(filePath, (err, content) => {
-    if (err) { res.writeHead(404); return res.end('Not found'); }
+  fs.stat(filePath, (err, stat) => {
+    if (err || !stat.isFile()) { res.writeHead(404); return res.end('Not found'); }
     const ext = path.extname(filePath);
     const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
-    // HTML pages must never be served from a stale phone/browser cache —
+    // HTML pages must never be served from a stale phone/browser cache -
     // the booking form changes often and an old copy breaks bookings.
     if (ext === '.html') headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    // Range support: iOS Safari refuses to play <video> without it.
+    headers['Accept-Ranges'] = 'bytes';
+    const range = req.headers.range;
+    if (range) {
+      const m = /bytes=(\d*)-(\d*)/.exec(range);
+      if (m) {
+        const start = m[1] ? parseInt(m[1], 10) : 0;
+        const end = m[2] ? Math.min(parseInt(m[2], 10), stat.size - 1) : stat.size - 1;
+        if (start <= end && start < stat.size) {
+          headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + stat.size;
+          headers['Content-Length'] = end - start + 1;
+          res.writeHead(206, headers);
+          return fs.createReadStream(filePath, { start, end }).pipe(res);
+        }
+      }
+      headers['Content-Range'] = 'bytes */' + stat.size;
+      res.writeHead(416, headers);
+      return res.end();
+    }
+    headers['Content-Length'] = stat.size;
     res.writeHead(200, headers);
-    res.end(content);
+    fs.createReadStream(filePath).pipe(res);
   });
 });
 
