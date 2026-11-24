@@ -298,8 +298,8 @@ async function checkReminders() {
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const SERVICES = [
-  'Haircut & Beard', 'Head Massage', 'Beard Trim and Threading', "Men's Haircut", 'Beard Trim',
-  'Face Scrub', 'Hair Perm', 'Beard Perm', "Men's Facial", 'Phone / Walk-in',
+  'Haircut & Beard', 'Beard Trim and Threading', 'Beard Trim', "Men's Haircut", 'Face Scrub',
+  'Head Massage', 'Beard Perm', 'Hair Perm', "Men's Facial", 'Phone / Walk-in',
 ];
 
 // Display durations in minutes (shown in the owner dashboard, like the old site).
