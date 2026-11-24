@@ -61,6 +61,7 @@ function bookingEmailHtml(eyebrow, title, rows, footerLines) {
 // except the customer — and only by text, only when a phone was filled in.
 const PERM_INSTRUCTIONS_TEXT = 'Beard Perm - before your appointment:\n- Before coming, wash your beard thoroughly with shampoo.\n- Come with a clean, dry beard - do not apply beard oil, balm or wax that day.\n- Any other questions? Call (778) 344-2550.';
 const PERM_INSTRUCTIONS_HTML = '<div style="text-align:left;color:#141a29;font-size:15px;line-height:1.6;"><b>Beard Perm \u2014 before your appointment:</b><br>\u2022 Before coming, wash your beard thoroughly with shampoo.<br>\u2022 Come with a clean, dry beard \u2014 no beard oil, balm or wax that day.<br>\u2022 Any other questions? Call (778) 344-2550.</div>';
+const PERM_SMS_TEXT = 'Ajay Haircut - Beard Perm instructions: Before coming, wash your beard thoroughly with shampoo. Come with a clean, dry beard - no beard oil, balm or wax that day. Questions? Call (778) 344-2550. Please do not reply to this text.';
 function hasBeardPerm(b) { const list = Array.isArray(b.services) && b.services.length ? b.services : [b.service]; return list.includes('Beard Perm'); }
 function sendBookingEmails(b, fromDashboard) {
   if (!BREVO_API_KEY) return;
@@ -133,7 +134,7 @@ function sendBookingTexts(b, authed) {
       'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change or cancel? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.') + ' Please do not reply to this text.');
     if (hasBeardPerm(b)) {
       sendSms(normalizePhone(b.phone),
-        'Ajay Haircut - Beard Perm instructions: Before coming, wash your beard thoroughly with shampoo. Come with a clean, dry beard - no beard oil, balm or wax that day. Questions? Call (778) 344-2550. Please do not reply to this text.');
+        PERM_SMS_TEXT);
     }
   }
   // The owner is never texted about bookings — website bookings reach him
@@ -194,24 +195,53 @@ function sendCancellationNotice(b) {
 // Reschedule notices use the same channel rule as cancellations: online
 // customers are emailed, dashboard customers are texted, with the other
 // channel as fallback. Fires only when the date or time actually changed.
-function sendRescheduleNotice(b, oldDate, oldTime) {
+function sendUpdateNotice(b, oldService, oldList) {
   if (b.blockedSlot) return;
+  const newlyPerm = !(oldList || []).includes('Beard Perm') && hasBeardPerm(b);
+  const emailIt = () => {
+    if (!b.email || !BREVO_API_KEY) return false;
+    sendEmail(b.email,
+      'Appointment Updated: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
+      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been updated.\n\nService was: ' + oldService + '\nService now: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nQuestions? Call us at (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com') + '\n' + (newlyPerm ? '\n' + PERM_INSTRUCTIONS_TEXT + '\n' : ''),
+      bookingEmailHtml('APPOINTMENT UPDATED', 'Your appointment has been updated', [
+        ['Service was', esc(oldService)],
+        ['Service now', esc(b.service)],
+        ['Date', esc(b.date)],
+        ['Time', esc(b.time)],
+      ], [...(newlyPerm ? [PERM_INSTRUCTIONS_HTML] : []), hasBeardPerm(b) ? 'Questions? Call (778) 344-2550' : 'Questions? Call (778) 344-2550 · Book online: ajayhaircut.com']));
+    return true;
+  };
+  const textIt = () => {
+    if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
+    sendSms(normalizePhone(b.phone),
+      'Hi ' + b.name + ', your appointment at Ajay Haircut has been updated: service changed from ' + oldService + ' to ' + b.service + '. ' + b.date + ' at ' + b.time + '. Questions? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.') + ' Please do not reply to this text.');
+    if (newlyPerm) sendSms(normalizePhone(b.phone), PERM_SMS_TEXT);
+    return true;
+  };
+  if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
+  else { if (!emailIt()) textIt(); }
+}
+
+function sendRescheduleNotice(b, oldDate, oldTime, oldList) {
+  if (b.blockedSlot) return;
+  const newlyPerm = !(oldList || []).includes('Beard Perm') && hasBeardPerm(b);
   const emailIt = () => {
     if (!b.email || !BREVO_API_KEY) return false;
     sendEmail(b.email,
       'Appointment Rescheduled: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
-      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been rescheduled.\n\nService: ' + b.service + '\nWas: ' + oldDate + ' at ' + oldTime + '\nNow: ' + b.date + ' at ' + b.time + '\n\nQuestions? Call us at (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com') + '\n',
+      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been rescheduled.\n\nService: ' + b.service + '\nWas: ' + oldDate + ' at ' + oldTime + '\nNow: ' + b.date + ' at ' + b.time + '\n\nQuestions? Call us at (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com') + '\n' + (newlyPerm ? '\n' + PERM_INSTRUCTIONS_TEXT + '\n' : ''),
       bookingEmailHtml('APPOINTMENT RESCHEDULED', 'Your appointment has been moved', [
         ['Service', esc(b.service)],
         ['Was', esc(oldDate) + ' at ' + esc(oldTime)],
         ['Now', esc(b.date) + ' at ' + esc(b.time)],
-      ], [hasBeardPerm(b) ? 'Questions? Call (778) 344-2550' : 'Questions? Call (778) 344-2550 · Book online: ajayhaircut.com']));
+      ], [...(newlyPerm ? [PERM_INSTRUCTIONS_HTML] : []), hasBeardPerm(b) ? 'Questions? Call (778) 344-2550' : 'Questions? Call (778) 344-2550 · Book online: ajayhaircut.com']));
     return true;
   };
   const textIt = () => {
     if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
     sendSms(normalizePhone(b.phone),
       'Hi ' + b.name + ', your appointment at Ajay Haircut has been rescheduled to ' + b.date + ' at ' + b.time + ' (' + b.service + '). Questions? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.') + ' Please do not reply to this text.');
+    if (newlyPerm) sendSms(normalizePhone(b.phone), PERM_SMS_TEXT);
     return true;
   };
   if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
@@ -565,11 +595,20 @@ const server = http.createServer(async (req, res) => {
       if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
         return sendJson(res, 409, { error: 'That slot is already taken.' });
     }
-    const oldDate = cur.date, oldTime = cur.time;
+    const oldDate = cur.date, oldTime = cur.time, oldService = cur.service, oldList = serviceListOf(cur).slice();
     Object.assign(cur, next);
-    if ((oldDate !== cur.date || oldTime !== cur.time) && cur.status === 'booked' && !cur.blockedSlot) {
-      cur.reminderSentAt = null; // re-arm the 2-hour reminder for the new slot
-      sendRescheduleNotice(cur, oldDate, oldTime);
+    const moved = oldDate !== cur.date || oldTime !== cur.time;
+    const svcChanged = JSON.stringify([...serviceListOf(cur)].sort()) !== JSON.stringify([...oldList].sort());
+    if ((moved || svcChanged) && cur.status === 'booked' && !cur.blockedSlot) {
+      if (moved) {
+        cur.reminderSentAt = null; // re-arm the 2-hour reminder for the new slot
+        sendRescheduleNotice(cur, oldDate, oldTime, oldList);
+      } else {
+        // Service-only change (same date/time): the customer still gets an
+        // update notice — plus the Beard Perm prep instructions when the
+        // new services newly include a Beard Perm.
+        sendUpdateNotice(cur, oldService, oldList);
+      }
     }
     saveBookings(bookings);
     return sendJson(res, 200, { ok: true, booking: cur });
