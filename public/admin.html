@@ -427,10 +427,7 @@
     svcBox.innerHTML = '';
     const curList = booking ? (Array.isArray(booking.services) && booking.services.length ? booking.services : (booking.service ? [booking.service] : [])) : [];
     const orderedServices = ['Phone / Walk-in', 'Haircut & Beard', 'Beard Perm',
-      ...services.filter(s => !['Phone / Walk-in', 'Haircut & Beard', 'Beard Perm'].includes(s))]
-      // Hidden from the dashboard by the owner's request — they stay bookable
-      // online, and still show when editing a booking that already has them.
-      .filter(s => !["Men's Haircut", 'Styling / Wash'].includes(s) || curList.includes(s));
+      ...services.filter(s => !['Phone / Walk-in', 'Haircut & Beard', 'Beard Perm'].includes(s))];
     orderedServices.forEach(s => {
       const lab = document.createElement('label'); lab.className = 'fsvc';
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = s; cb.checked = curList.includes(s);
