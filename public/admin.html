@@ -291,7 +291,6 @@
     const mk = (label, cls, fn) => { const btn = document.createElement('button'); btn.className = 'actbtn ' + cls; btn.textContent = label; btn.onclick = fn; td.appendChild(btn); };
     if (b.status === 'booked') {
       mk('Edit', 'edit', () => openModal(b));
-      if (!b.blockedSlot) mk('Complete', 'complete', () => setStatus(b.id, 'completed'));
       mk('Cancel', 'cancel', () => { if (confirm('Cancel this booking?')) setStatus(b.id, 'cancelled'); });
     } else {
       mk('Restore', 'edit', () => setStatus(b.id, 'booked'));
