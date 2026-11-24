@@ -299,13 +299,13 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const SERVICES = [
   'Haircut & Beard', 'Skin Fade', 'Beard Trim and Threading', "Men's Haircut", 'Beard Trim',
-  'Styling / Wash', 'Hair Perm', 'Beard Perm', "Men's Facial", 'Phone / Walk-in',
+  'Face Scrub', 'Hair Perm', 'Beard Perm', "Men's Facial", 'Phone / Walk-in',
 ];
 
 // Display durations in minutes (shown in the owner dashboard, like the old site).
 const DURATIONS = {
   "Men's Haircut": 30, 'Skin Fade': 30, 'Beard Trim': 15, 'Beard Trim and Threading': 30, 'Haircut & Beard': 45,
-  'Styling / Wash': 20, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45, 'Phone / Walk-in': 30,
+  'Face Scrub': 15, 'Styling / Wash': 20, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45, 'Phone / Walk-in': 30,
 };
 
 // Bookable slots: 9:00 AM to 8:00 PM, every 15 minutes. Last slot = 8:00 PM.
