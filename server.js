@@ -130,10 +130,10 @@ function sendBookingTexts(b, authed) {
   const when = b.date + ' at ' + b.time;
   if (b.phone) {
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change or cancel? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.'));
+      'Hi ' + b.name + ', your booking at Ajay Haircut is confirmed: ' + b.service + ' on ' + when + '. Unit 102, 9385 120 St, Delta, BC. Need to change or cancel? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.') + ' Please do not reply to this text.');
     if (hasBeardPerm(b)) {
       sendSms(normalizePhone(b.phone),
-        'Ajay Haircut - Beard Perm instructions: Before coming, wash your beard thoroughly with shampoo. Come with a clean, dry beard - no beard oil, balm or wax that day. Questions? Call (778) 344-2550.');
+        'Ajay Haircut - Beard Perm instructions: Before coming, wash your beard thoroughly with shampoo. Come with a clean, dry beard - no beard oil, balm or wax that day. Questions? Call (778) 344-2550. Please do not reply to this text.');
     }
   }
   // The owner is never texted about bookings — website bookings reach him
@@ -184,7 +184,7 @@ function sendCancellationNotice(b) {
   const textIt = () => {
     if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your appointment at Ajay Haircut (' + b.service + ' on ' + b.date + ' at ' + b.time + ') has been cancelled. To rebook, call (778) 344-2550' + (hasBeardPerm(b) ? '.' : ' or visit ajayhaircut.com.'));
+      'Hi ' + b.name + ', your appointment at Ajay Haircut (' + b.service + ' on ' + b.date + ' at ' + b.time + ') has been cancelled. To rebook, call (778) 344-2550' + (hasBeardPerm(b) ? '.' : ' or visit ajayhaircut.com.') + ' Please do not reply to this text.');
     return true;
   };
   if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
@@ -211,7 +211,7 @@ function sendRescheduleNotice(b, oldDate, oldTime) {
   const textIt = () => {
     if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your appointment at Ajay Haircut has been rescheduled to ' + b.date + ' at ' + b.time + ' (' + b.service + '). Questions? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.'));
+      'Hi ' + b.name + ', your appointment at Ajay Haircut has been rescheduled to ' + b.date + ' at ' + b.time + ' (' + b.service + '). Questions? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.') + ' Please do not reply to this text.');
     return true;
   };
   if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
@@ -254,7 +254,7 @@ async function checkReminders() {
         let ok = false;
         if (b.phone && TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
           ok = (await sendSms(normalizePhone(b.phone),
-            'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Delta, BC. Change/cancel: (778) 344-2550' + (hasBeardPerm(b) ? '' : '. Book online: ajayhaircut.com'))) || ok;
+            'Ajay Haircut reminder: Hi ' + first + ', your appointment is today at ' + b.time + '. Unit 102, 9385 120 St, Delta, BC. Change/cancel: (778) 344-2550' + (hasBeardPerm(b) ? '. Please do not reply to this text.' : '. Book online: ajayhaircut.com. Please do not reply to this text.'))) || ok;
         }
         if (b.email) ok = (await sendReminderEmail(b)) || ok;
         if (ok) { b.reminderSentAt = new Date().toISOString(); changed = true; }
