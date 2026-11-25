@@ -24,7 +24,7 @@
   /* Header */
   header{position:sticky;top:0;z-index:50;background:rgba(8,8,10,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(198,161,91,.18)}
   .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 0}
-  .logo{font-family:'Playfair Display',serif;font-size:24px;font-weight:900;letter-spacing:3px}
+  .logo{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;letter-spacing:3px}
   .logo span{color:var(--gold)}
   nav a{margin-left:28px;color:var(--text);font-size:13.5px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;position:relative;padding:4px 0}
   nav a::after{content:'';position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--gold);transition:.25s}
@@ -164,6 +164,8 @@
   @media (max-width:860px){
     .story,.book-shell,.visit{grid-template-columns:1fr}
     .book-info{border-right:none;border-bottom:1px solid var(--line)}
+    .bar{justify-content:center;padding:12px 0}
+    .logo{font-size:clamp(28px,10vw,48px);letter-spacing:1.5px;text-align:center;white-space:nowrap}
     .hero{padding:100px 16px 90px}
     .hero h1{font-size:40px} h2{font-size:30px} nav{display:none}
     section{padding:64px 0}
