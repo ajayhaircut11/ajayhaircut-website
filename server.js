@@ -49,7 +49,8 @@ function bookingEmailHtml(eyebrow, title, rows, footerLines, strikeRows) {
     '<div style="color:#8a8f9c;font-size:15px;line-height:1.5;text-align:center;">' + l + '</div>').join('');
   return '<div style="margin:0;padding:24px 12px;background:#f4f2ed;font-family:Arial,Helvetica,sans-serif;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e6e2d9;">' +
-    '<tr><td style="background:#0d1526;padding:34px 28px 30px;">' +
+    '<tr><td style="background:#0d1526;padding:30px 28px 30px;text-align:center;">' +
+    '<img src="https://ajayhaircut.com/images/logo-email.png" width="120" alt="Ajay Haircut" style="display:block;margin:0 auto 16px;">' +
     '<div style="color:#c9a24b;font-size:13px;font-weight:700;letter-spacing:4px;">' + esc(eyebrow) + '</div>' +
     '<div style="color:#ffffff;font-size:30px;font-weight:800;line-height:1.25;margin-top:10px;">' + esc(title) + '</div>' +
     '</td></tr>' +
