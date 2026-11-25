@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ajay Haircut | Best Barber in Surrey BC — Men's Haircuts, Fades & Beard Trims</title>
 <meta name="description" content="Premium men's barber shop in Surrey, BC offering haircuts, skin fades, beard trims, hair & beard perms, and men's facials. 11+ years of experience.">
+<link rel="icon" type="image/png" href="/images/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -37,6 +38,7 @@
   .btn.ghost:hover{border-color:var(--gold);color:var(--gold-2)}
 
   /* Hero */
+  .hero-logo{display:block;width:200px;max-width:55vw;margin:0 auto 18px;mix-blend-mode:screen}
   .hero{position:relative;text-align:center;padding:150px 20px 130px;background:linear-gradient(rgba(5,5,7,.45),rgba(5,5,7,.68)),url('/images/hero.jpg') center 30%/cover;overflow:hidden}
   .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 55% at 50% 38%,transparent 40%,rgba(0,0,0,.35) 100%);pointer-events:none}
   .hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:110px;background:linear-gradient(transparent,var(--ink))}
@@ -166,6 +168,7 @@
     .book-info{border-right:none;border-bottom:1px solid var(--line)}
     .bar{justify-content:center;padding:12px 0}
     .logo{font-size:clamp(28px,10vw,48px);letter-spacing:1.5px;text-align:center;white-space:nowrap}
+    .hero-logo{width:160px}
     .hero{padding:100px 16px 90px}
     .hero h1{font-size:40px} h2{font-size:30px} nav{display:none}
     section{padding:64px 0}
@@ -188,6 +191,7 @@
 
 <div class="hero">
   <div class="inner">
+    <img class="hero-logo" src="/images/logo.png" alt="Ajay Haircut logo">
     <div class="badge">✂ Premium Men's Grooming · Surrey, BC</div>
     <h1>Look Sharp. <em>Feel Legendary.</em></h1>
     <p>11+ years of precision haircuts, beard styling, perms &amp; men's facials — crafted for the modern gentleman.</p>
