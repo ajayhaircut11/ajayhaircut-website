@@ -67,6 +67,12 @@
   .tnote { color:var(--muted); font-size:12.5px; margin-top:3px; max-width:170px; }
   .calllink { color:var(--gold); font-weight:700; text-decoration:none; white-space:nowrap; }
   .calllink:active { opacity:.6; }
+  .namewrap { position:relative; }
+    .namesugg { position:absolute; left:0; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 30px rgba(20,20,40,.20); z-index:40; overflow:hidden; }
+    .namesugg button { display:flex; justify-content:space-between; align-items:center; gap:12px; width:100%; padding:12px; background:#fff; border:none; border-bottom:1px solid #f0eee8; font-size:15.5px; font-family:inherit; color:var(--ink); text-align:left; cursor:pointer; }
+    .namesugg button:last-child { border-bottom:none; }
+    .namesugg button:active { background:#faf6ec; }
+    .namesugg .np { color:var(--gold-dark); font-weight:700; white-space:nowrap; font-size:14.5px; }
   .tbooked { color:var(--muted); font-size:12.5px; margin-top:3px; }
   .editbtn { background:none; border:none; color:var(--navy); font-weight:700; font-size:14.5px; cursor:pointer; padding:2px 4px; }
   .editbtn:hover { color:var(--gold-dark); }
@@ -184,7 +190,7 @@
     <label class="flabel">Time</label>
     <div class="chips" id="fChips"></div>
     <label class="flabel" for="fName">Customer name</label>
-    <input id="fName" type="text" placeholder="Customer name">
+    <div class="namewrap"><input id="fName" type="text" placeholder="Customer name" autocomplete="off"><div id="nameSugg" class="namesugg" style="display:none;"></div></div>
     <label class="flabel" for="fPhone">Phone (optional)</label>
     <input id="fPhone" type="tel" placeholder="Phone number">
     <label class="flabel" for="fNotes">Notes (optional)</label>
@@ -382,6 +388,46 @@
     if (r.ok) { const d = await r.json(); blocked = d.blocked || blocked; renderCalendar(); renderDay(); }
     else alert('Could not update the day. Please try again.');
   };
+
+  // ---------- Returning-customer lookup ----------
+  // As the owner types a name in the booking form, past bookings are
+  // searched and tapping a match fills the customer's phone number.
+  function customerIndex() {
+    const map = {};
+    for (const b of bookings) {
+      if (b.blockedSlot || !b.name || !b.phone) continue;
+      const key = b.name.trim().toLowerCase();
+      if (!key) continue;
+      const prev = map[key];
+      if (!prev || String(b.date) > String(prev.date)) map[key] = b;
+    }
+    return map;
+  }
+  const nameInput = document.getElementById('fName');
+  const nameSugg = document.getElementById('nameSugg');
+  nameInput.addEventListener('input', () => {
+    const q = nameInput.value.trim().toLowerCase();
+    if (q.length < 2) { nameSugg.style.display = 'none'; return; }
+    const idx = customerIndex();
+    const hits = Object.keys(idx).filter(k => k.indexOf(q) !== -1).sort().slice(0, 6);
+    if (!hits.length) { nameSugg.style.display = 'none'; return; }
+    nameSugg.innerHTML = '';
+    for (const k of hits) {
+      const b = idx[k];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.innerHTML = '<span>' + esc(b.name) + '</span><span class="np">' + esc(b.phone) + '</span>';
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        nameInput.value = b.name;
+        document.getElementById('fPhone').value = b.phone || '';
+        nameSugg.style.display = 'none';
+      });
+      nameSugg.appendChild(btn);
+    }
+    nameSugg.style.display = 'block';
+  });
+  nameInput.addEventListener('blur', () => setTimeout(() => { nameSugg.style.display = 'none'; }, 200));
 
   // ---------- Add / edit modal ----------
   const overlay = document.getElementById('overlay');
