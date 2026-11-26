@@ -87,7 +87,7 @@ function sendBookingEmails(b, fromDashboard) {
       ['Date', esc(b.date)],
       ['Time', esc(b.time)],
       ['Customer', esc(b.name)],
-      ['Phone', '<span style="color:#c9a24b;">' + esc(b.phone || '\u2014') + '</span>'],
+      ['Phone', (b.phone && normalizePhone(b.phone)) ? '<a href="tel:' + normalizePhone(b.phone) + '" style="color:#c9a24b;text-decoration:none;font-weight:700;">\uD83D\uDCDE ' + esc(b.phone) + '</a>' : '<span style="color:#c9a24b;">' + esc(b.phone || '\u2014') + '</span>'],
       ['Email', b.email ? '<a href="mailto:' + esc(b.email) + '" style="color:#2f6fd0;text-decoration:underline;">' + esc(b.email) + '</a>' : '\u2014'],
       ...(b.notes ? [['Notes', esc(b.notes)]] : []),
     ]));
