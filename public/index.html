@@ -370,6 +370,8 @@
   let loadedDate = null;
   let daySlots = [];
   let daySpans = [];
+  let dayToday = null;
+  let dayNowMinutes = -1;
   function slotToMin(t) {
     const m = t.match(/(\d+):(\d+)\s*(AM|PM)/);
     let mins = (parseInt(m[1], 10) % 12) * 60 + parseInt(m[2], 10);
@@ -386,8 +388,11 @@
     slotsEl.innerHTML = '';
     const dur = selectedDuration() || 15;
     let selStillFree = false;
+    let shown = 0;
     daySlots.forEach(t => {
       const start = slotToMin(t);
+      // Past times for today are not shown at all (shop time, from the server).
+      if (loadedDate && loadedDate === dayToday && start <= dayNowMinutes) return;
       const clash = daySpans.some(sp => start < sp.end && start + dur > sp.start);
       const div = document.createElement('div');
       div.className = 'slot' + (clash ? ' taken' : '');
@@ -397,8 +402,10 @@
         div.onclick = () => { document.querySelectorAll('.slot').forEach(s => s.classList.remove('sel')); div.classList.add('sel'); selectedTime = t; };
       }
       slotsEl.appendChild(div);
+      shown++;
     });
     if (selectedTime && !selStillFree) selectedTime = null;
+    if (shown === 0 && daySlots.length) slotsEl.innerHTML = '<p class="err">All of today\'s times have passed. Please pick another day.</p>';
   }
 
   const today = new Date();
@@ -422,6 +429,8 @@
     if (data.blocked) { daySlots = []; daySpans = []; slotsEl.innerHTML = '<p class="err">We are closed on this day. Please pick another day.</p>'; return; }
     daySlots = data.slots || [];
     daySpans = data.spans || [];
+    dayToday = data.today || null;
+    dayNowMinutes = (typeof data.nowMinutes === 'number') ? data.nowMinutes : -1;
     renderSlots();
   });
 
