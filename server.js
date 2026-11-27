@@ -142,6 +142,112 @@ function sendBookingTexts(b, authed) {
   // by email only, and dashboard bookings do not notify him at all.
 }
 
+// ---------- Booking deposits (Stripe) ----------
+// Online bookings that include a perm service need a $20 deposit, paid by
+// card (Apple Pay / Google Pay included) through Stripe Checkout before
+// the booking is confirmed. Rules set by the owner 2026-11-27: $20, perm
+// services only, and the deposit is refunded automatically when the
+// booking is cancelled 6 or more hours before the appointment; inside
+// 6 hours it is kept. Set STRIPE_SECRET_KEY in the environment to enable
+// (STRIPE_WEBHOOK_SECRET too, for instant confirmation). Without the key
+// the site takes perm bookings exactly as before — no deposit is asked.
+// Stripe is called over its HTTPS API, like Brevo and Twilio above.
+const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const SITE_URL = (process.env.SITE_URL || 'https://ajayhaircut.com').replace(/\/$/, '');
+const DEPOSIT_CENTS = 2000;
+const DEPOSIT_SERVICES = ['Beard Perm', 'Hair Perm'];
+const DEPOSIT_REFUND_WINDOW_MS = 6 * 60 * 60 * 1000;
+const DEPOSIT_HOLD_MS = 35 * 60 * 1000; // an unpaid booking holds its slot this long
+function depositEnabled() { return !!STRIPE_KEY; }
+function needsDeposit(svcList) { return (svcList || []).some(s => DEPOSIT_SERVICES.includes(s)); }
+async function stripeApi(method, stripePath, params) {
+  const res = await fetch('https://api.stripe.com/v1/' + stripePath, {
+    method,
+    headers: { 'Authorization': 'Bearer ' + STRIPE_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params ? new URLSearchParams(params).toString() : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error('Stripe ' + res.status + ': ' + ((data.error && data.error.message) || 'request failed'));
+  return data;
+}
+async function createDepositSession(booking) {
+  const params = {
+    mode: 'payment',
+    success_url: SITE_URL + '/?deposit=success&session_id={CHECKOUT_SESSION_ID}#book',
+    cancel_url: SITE_URL + '/?deposit=cancelled&session_id={CHECKOUT_SESSION_ID}#book',
+    expires_at: String(Math.floor(Date.now() / 1000) + 30 * 60),
+    'line_items[0][quantity]': '1',
+    'line_items[0][price_data][currency]': 'cad',
+    'line_items[0][price_data][unit_amount]': String(DEPOSIT_CENTS),
+    'line_items[0][price_data][product_data][name]': 'Booking deposit \u2014 ' + booking.service,
+    'line_items[0][price_data][product_data][description]': 'Ajay Haircut appointment on ' + booking.date + ' at ' + booking.time + '. Fully refunded if you cancel 6 or more hours before your appointment.',
+    'metadata[bookingId]': booking.id,
+    'payment_intent_data[metadata][bookingId]': booking.id,
+  };
+  if (booking.email) params.customer_email = booking.email;
+  return stripeApi('POST', 'checkout/sessions', params);
+}
+// Marks a pending booking confirmed once Stripe says the deposit is paid,
+// then sends the usual confirmation + owner emails (online rules). Safe to
+// call more than once — it only acts on a still-pending booking.
+function confirmDepositPaid(list, booking, session) {
+  if (booking.status !== 'pending' || booking.depositStatus !== 'pending') return false;
+  booking.status = 'booked';
+  booking.depositStatus = 'paid';
+  if (session && session.payment_intent) booking.depositPaymentIntent = session.payment_intent;
+  booking.depositPaidAt = new Date().toISOString();
+  saveBookings(list);
+  sendBookingEmails(booking, false);
+  console.log('Deposit paid, booking confirmed:', booking.id);
+  return true;
+}
+// Releases a pending booking whose deposit was never paid. Silent — the
+// customer never completed a booking, so no cancellation notice goes out.
+function expirePendingDeposit(list, booking) {
+  booking.status = 'cancelled';
+  booking.depositStatus = 'expired';
+  saveBookings(list);
+}
+// On cancellation of a deposit-paid booking: refund when the appointment
+// is still 6+ hours away, otherwise the deposit is kept (owner's rule).
+async function settleDepositOnCancel(b) {
+  if (b.depositStatus !== 'paid' || !b.depositPaymentIntent || !depositEnabled()) return;
+  if (shopInstant(b.date, b.time) - Date.now() >= DEPOSIT_REFUND_WINDOW_MS) {
+    try {
+      await stripeApi('POST', 'refunds', { payment_intent: b.depositPaymentIntent });
+      b.depositStatus = 'refunded';
+      b.depositRefundedAt = new Date().toISOString();
+      console.log('Deposit refunded for booking', b.id);
+    } catch (e) { console.error('Deposit refund failed:', e.message); }
+  } else {
+    b.depositStatus = 'kept';
+    console.log('Deposit kept (cancelled inside 6 hours) for booking', b.id);
+  }
+}
+let depositCheckRunning = false;
+// Safety net alongside the reminder sweep: confirms pending bookings
+// Stripe says are paid (webhook/return normally beat this to it) and
+// releases slots whose deposit was never paid within the hold window.
+async function checkDeposits() {
+  if (!depositEnabled() || depositCheckRunning) return;
+  depositCheckRunning = true;
+  try {
+    const list = loadBookings();
+    for (const b of list) {
+      if (b.status !== 'pending' || b.depositStatus !== 'pending' || !b.depositSessionId) continue;
+      const age = Date.now() - new Date(b.depositCreatedAt || b.createdAt).getTime();
+      if (age < 5 * 60 * 1000) continue;
+      try {
+        const s = await stripeApi('GET', 'checkout/sessions/' + b.depositSessionId);
+        if (s.payment_status === 'paid') { confirmDepositPaid(list, b, s); continue; }
+      } catch (e) { console.error('Deposit check failed:', e.message); }
+      if (age > DEPOSIT_HOLD_MS) expirePendingDeposit(list, b);
+    }
+  } catch (e) { console.error('Deposit sweep failed:', e.message); }
+  depositCheckRunning = false;
+}
+
 // ---------- Appointment reminders ----------
 // A reminder text goes out 2 hours before each appointment (shop timezone),
 // in the exact format the owner asked for. Runs every 5 minutes while the
@@ -171,22 +277,24 @@ let reminderCheckRunning = false;
 // the customer always hears. Legacy bookings have no source: email first.
 function sendCancellationNotice(b) {
   if (b.blockedSlot) return;
+  const depositNote = b.depositStatus === 'refunded' ? 'Your $20 booking deposit has been refunded to your card (it can take a few days to appear).'
+    : b.depositStatus === 'kept' ? 'As this cancellation was within 6 hours of the appointment, the $20 booking deposit is non-refundable.' : '';
   const emailIt = () => {
     if (!b.email || !BREVO_API_KEY) return false;
     sendEmail(b.email,
       'Appointment Cancelled: ' + b.service + ' \u2014 ' + b.date + ' ' + b.time,
-      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been cancelled.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n\nTo rebook, call us at (778) 344-2550' + (hasBeardPerm(b) ? '.\n' : ' or visit ajayhaircut.com.\n'),
+      'Hi ' + b.name + ',\n\nYour appointment at Ajay Haircut has been cancelled.\n\nService: ' + b.service + '\nDate: ' + b.date + '\nTime: ' + b.time + '\n' + (depositNote ? '\n' + depositNote + '\n' : '') + '\nTo rebook, call us at (778) 344-2550' + (hasBeardPerm(b) ? '.\n' : ' or visit ajayhaircut.com.\n'),
       bookingEmailHtml('APPOINTMENT CANCELLED', 'Your appointment has been cancelled', [
         ['Service', esc(b.service)],
         ['Date', esc(b.date)],
         ['Time', esc(b.time)],
-      ], [hasBeardPerm(b) ? 'To rebook, call (778) 344-2550' : 'To rebook, call (778) 344-2550 or visit ajayhaircut.com'], true));
+      ], [...(depositNote ? [depositNote] : []), hasBeardPerm(b) ? 'To rebook, call (778) 344-2550' : 'To rebook, call (778) 344-2550 or visit ajayhaircut.com'], true));
     return true;
   };
   const textIt = () => {
     if (!b.phone || !TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return false;
     sendSms(normalizePhone(b.phone),
-      'Hi ' + b.name + ', your appointment at Ajay Haircut has been cancelled:\n\uD83D\uDCC5 Date: ' + b.date + '\n\u23F0 Time: ' + b.time + '\nService: ' + b.service + '\nTo rebook, call (778) 344-2550' + (hasBeardPerm(b) ? '.' : ' or visit ajayhaircut.com.') + ' Please do not reply to this text.');
+      'Hi ' + b.name + ', your appointment at Ajay Haircut has been cancelled:\n\uD83D\uDCC5 Date: ' + b.date + '\n\u23F0 Time: ' + b.time + '\nService: ' + b.service + '\nTo rebook, call (778) 344-2550' + (hasBeardPerm(b) ? '.' : ' or visit ajayhaircut.com.') + (depositNote ? ' ' + depositNote : '') + ' Please do not reply to this text.');
     return true;
   };
   if (b.source === 'dashboard') { if (!textIt()) emailIt(); }
@@ -429,7 +537,8 @@ function spansOverlap(aStart, aEnd, b) {
 function takenSlots(date) {
   const taken = new Set();
   for (const b of loadBookings()) {
-    if (b.date !== date || b.status !== 'booked') continue;
+    // 'pending' = a perm booking waiting for its deposit — it holds its slot.
+    if (b.date !== date || (b.status !== 'booked' && b.status !== 'pending')) continue;
     const { start, end } = bookingSpan(b);
     for (let m = start; m < end; m += 15) taken.add(slotLabel(m));
   }
@@ -470,9 +579,64 @@ const server = http.createServer(async (req, res) => {
     // Booked spans (start/end in minutes) let the booking form grey out any
     // start time whose service duration would run into the next appointment.
     const spans = loadBookings()
-      .filter(b => b.date === date && b.status === 'booked')
+      .filter(b => b.date === date && (b.status === 'booked' || b.status === 'pending'))
       .map(b => { const s = bookingSpan(b); return { start: s.start, end: s.end }; });
     return sendJson(res, 200, { date, slots: allSlots(), taken, spans, blocked: loadBlocked().includes(date) });
+  }
+
+  // Stripe calls this when a checkout finishes or expires. The raw body is
+  // needed for the signature check. A payment is only ever confirmed after
+  // re-reading the session from Stripe itself, so a forged call cannot
+  // fake a paid deposit.
+  if (url.pathname === '/api/stripe/webhook' && req.method === 'POST') {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const raw = Buffer.concat(chunks);
+    if (STRIPE_WEBHOOK_SECRET) {
+      const parts = {};
+      for (const p of String(req.headers['stripe-signature'] || '').split(',')) { const i = p.indexOf('='); if (i > 0) parts[p.slice(0, i)] = p.slice(i + 1); }
+      const expected = crypto.createHmac('sha256', STRIPE_WEBHOOK_SECRET).update(String(parts.t || '') + '.' + raw.toString('utf8')).digest('hex');
+      const a = Buffer.from(expected), bb = Buffer.from(String(parts.v1 || ''));
+      if (!parts.t || a.length !== bb.length || !crypto.timingSafeEqual(a, bb)) return sendJson(res, 400, { error: 'Bad signature.' });
+    }
+    let event = {};
+    try { event = JSON.parse(raw.toString('utf8')); } catch { return sendJson(res, 400, { error: 'Bad payload.' }); }
+    const obj = (event.data && event.data.object) || {};
+    if (depositEnabled() && (event.type === 'checkout.session.completed' || event.type === 'checkout.session.expired')) {
+      const list = loadBookings();
+      const bk = list.find(x => x.depositSessionId && x.depositSessionId === obj.id)
+        || list.find(x => obj.metadata && obj.metadata.bookingId && x.id === obj.metadata.bookingId);
+      if (bk && bk.status === 'pending' && bk.depositStatus === 'pending') {
+        if (event.type === 'checkout.session.completed') {
+          try { const s = await stripeApi('GET', 'checkout/sessions/' + obj.id); if (s.payment_status === 'paid') confirmDepositPaid(list, bk, s); }
+          catch (e) { console.error('Webhook confirm failed:', e.message); }
+        } else {
+          expirePendingDeposit(list, bk);
+        }
+      }
+    }
+    return sendJson(res, 200, { received: true });
+  }
+
+  // The page the customer returns to after Stripe polls this to learn the
+  // outcome; it also confirms the booking on the spot when Stripe says the
+  // deposit is paid, and releases the slot when the customer backed out.
+  if (url.pathname === '/api/deposit/status' && req.method === 'GET') {
+    const sid = url.searchParams.get('session_id') || '';
+    const list = loadBookings();
+    const bk = list.find(x => x.depositSessionId && x.depositSessionId === sid);
+    if (!bk) return sendJson(res, 404, { error: 'Booking not found.' });
+    if (bk.status === 'pending' && bk.depositStatus === 'pending' && depositEnabled()) {
+      try {
+        const s = await stripeApi('GET', 'checkout/sessions/' + sid);
+        if (s.payment_status === 'paid') confirmDepositPaid(list, bk, s);
+        else if (s.status === 'expired' || url.searchParams.get('release') === '1') expirePendingDeposit(list, bk);
+      } catch (e) { console.error('Deposit status check failed:', e.message); }
+    }
+    return sendJson(res, 200, {
+      status: bk.status, depositStatus: bk.depositStatus || 'none',
+      booking: { name: bk.name, service: bk.service, services: serviceListOf(bk), date: bk.date, time: bk.time },
+    });
   }
 
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
@@ -503,7 +667,7 @@ const server = http.createServer(async (req, res) => {
     }
     const nStart = slotMinutes(time);
     const nEnd = nStart + (b.blockTime ? blockMinutes : totalDuration({ services: svcList }));
-    if (bookings.some(x => x.date === date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
+    if (bookings.some(x => x.date === date && (x.status === 'booked' || x.status === 'pending') && spansOverlap(nStart, nEnd, x)))
       return sendJson(res, 409, { error: 'That time overlaps an existing booking. Please pick another time.' });
     const booking = {
       id: crypto.randomUUID(), name: b.blockTime ? 'Blocked' : String(name).slice(0, 80),
@@ -512,6 +676,28 @@ const server = http.createServer(async (req, res) => {
       source: authed ? 'dashboard' : 'online', smsConsent: authed ? !!b.smsConsent : true, status: 'booked', createdAt: new Date().toISOString(),
     };
     bookings.push(booking);
+    // Perm bookings made online wait for their $20 Stripe deposit before
+    // they are confirmed: the booking is saved as 'pending' (holding its
+    // slot for 30 minutes) and no emails go out until the deposit is paid.
+    // If Stripe cannot be reached, the booking is confirmed without a
+    // deposit rather than lost.
+    if (!authed && !b.blockTime && depositEnabled() && needsDeposit(svcList)) {
+      booking.status = 'pending';
+      booking.depositStatus = 'pending';
+      booking.depositAmount = DEPOSIT_CENTS;
+      booking.depositCreatedAt = new Date().toISOString();
+      try {
+        const session = await createDepositSession(booking);
+        booking.depositSessionId = session.id;
+        saveBookings(bookings);
+        return sendJson(res, 201, { ok: true, depositRequired: true, checkoutUrl: session.url, booking });
+      } catch (e) {
+        console.error('Deposit session failed — confirming without deposit:', e.message);
+        booking.status = 'booked';
+        booking.depositStatus = 'none';
+        delete booking.depositCreatedAt;
+      }
+    }
     saveBookings(bookings);
     sendBookingEmails(booking, authed);
     sendBookingTexts(booking, authed);
@@ -593,7 +779,7 @@ const server = http.createServer(async (req, res) => {
     if (next.date !== cur.date || next.time !== cur.time || next.service !== cur.service || next.blockedSlot !== !!cur.blockedSlot || (next.blockMinutes || null) !== (cur.blockMinutes || null)) {
       const nStart = slotMinutes(next.time);
       const nEnd = nStart + (next.blockedSlot ? (next.blockMinutes || 15) : totalDuration(next));
-      if (bookings.some(x => x.id !== cur.id && x.date === next.date && x.status === 'booked' && spansOverlap(nStart, nEnd, x)))
+      if (bookings.some(x => x.id !== cur.id && x.date === next.date && (x.status === 'booked' || x.status === 'pending') && spansOverlap(nStart, nEnd, x)))
         return sendJson(res, 409, { error: 'That slot is already taken.' });
     }
     const oldDate = cur.date, oldTime = cur.time, oldService = cur.service, oldList = serviceListOf(cur).slice();
@@ -625,8 +811,9 @@ const server = http.createServer(async (req, res) => {
     if (!bk) return sendJson(res, 404, { error: 'Booking not found.' });
     const wasStatus = bk.status;
     bk.status = b.status;
+    if (b.status === 'cancelled' && wasStatus === 'booked') await settleDepositOnCancel(bk);
     saveBookings(bookings);
-    if (b.status === 'cancelled' && wasStatus !== 'cancelled') sendCancellationNotice(bk);
+    if (b.status === 'cancelled' && wasStatus !== 'cancelled' && wasStatus !== 'pending') sendCancellationNotice(bk);
     return sendJson(res, 200, { ok: true, booking: bk });
   }
 
@@ -637,9 +824,10 @@ const server = http.createServer(async (req, res) => {
     const idx = bookings.findIndex(b => b.id === delMatch[1]);
     if (idx === -1) return sendJson(res, 404, { error: 'Booking not found.' });
     const wasDelStatus = bookings[idx].status;
+    if (wasDelStatus === 'booked') await settleDepositOnCancel(bookings[idx]);
     bookings[idx].status = 'cancelled';
     saveBookings(bookings);
-    if (wasDelStatus !== 'cancelled') sendCancellationNotice(bookings[idx]);
+    if (wasDelStatus !== 'cancelled' && wasDelStatus !== 'pending') sendCancellationNotice(bookings[idx]);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -682,5 +870,6 @@ const server = http.createServer(async (req, res) => {
 initStore().then(() => {
   server.listen(PORT, () => console.log(`Ajay Haircut site running on http://localhost:${PORT}`));
   checkReminders();
-  setInterval(checkReminders, 5 * 60 * 1000);
+  checkDeposits();
+  setInterval(() => { checkReminders(); checkDeposits(); }, 5 * 60 * 1000);
 });
