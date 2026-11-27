@@ -195,6 +195,9 @@
     <input id="fPhone" type="tel" placeholder="Phone number">
     <label class="flabel" for="fNotes">Notes (optional)</label>
     <textarea id="fNotes" placeholder="Notes"></textarea>
+    <div id="depositRow" style="display:none; margin-top:10px;">
+      <label class="fsvc"><input type="checkbox" id="fAskDeposit" checked><span>💳 Send $20 deposit link — booking confirms only after the customer pays</span></label>
+    </div>
     <div class="err" id="formErr"></div>
     <div class="row">
       <button class="btn-navy" id="saveBtn" style="flex:1;">Save booking</button>
@@ -474,6 +477,7 @@
     const on = document.getElementById('fBlock').checked;
     ['fName', 'fPhone', 'fNotes'].forEach(id => { document.getElementById(id).disabled = on; });
     document.getElementById('blockDurRow').style.display = on ? '' : 'none';
+    syncDepositRow();
   }
   function openModal(booking) {
     editingId = booking ? booking.id : null;
@@ -489,7 +493,7 @@
     orderedServices.forEach(s => {
       const lab = document.createElement('label'); lab.className = 'fsvc';
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = s; cb.checked = curList.includes(s);
-      cb.addEventListener('change', () => buildChips(document.getElementById('fDate').value, pickedTime));
+      cb.addEventListener('change', () => { buildChips(document.getElementById('fDate').value, pickedTime); syncDepositRow(); });
       const nm = document.createElement('span'); nm.textContent = s;
       lab.appendChild(cb); lab.appendChild(nm);
       if (durations[s]) { const mn = document.createElement('span'); mn.className = 'mins'; mn.textContent = durations[s] + ' min'; lab.appendChild(mn); }
@@ -505,7 +509,17 @@
     buildChips(dateEl.value, booking ? booking.time : null);
     syncBlockUI();
     document.getElementById('cancelRow').style.display = booking ? '' : 'none';
+    syncDepositRow();
     overlay.classList.add('open');
+  }
+  // The deposit option only applies to a NEW booking that includes a perm
+  // service (and is not a blocked slot): the customer is texted a Stripe
+  // payment link and the booking confirms only once they pay.
+  function syncDepositRow() {
+    const perms = ['Beard Perm', 'Hair Perm'];
+    const hasPerm = [...document.querySelectorAll('#fServiceBox input:checked')].some(i => perms.includes(i.value));
+    const show = !editingId && !document.getElementById('fBlock').checked && hasPerm;
+    document.getElementById('depositRow').style.display = show ? '' : 'none';
   }
   function closeModal() { overlay.classList.remove('open'); }
   document.getElementById('fDate').addEventListener('change', e => buildChips(e.target.value, null));
@@ -526,11 +540,13 @@
       time: pickedTime,
       blockTime,
       blockMinutes: blockTime ? parseInt(document.getElementById('fBlockDur').value, 10) : undefined,
+      askDeposit: !editingId && document.getElementById('depositRow').style.display !== 'none' && document.getElementById('fAskDeposit').checked,
     };
     const errEl = document.getElementById('formErr');
     if (!payload.date || !payload.time) { errEl.textContent = 'Please pick a date and a time.'; return; }
     if (!blockTime && !payload.name) { errEl.textContent = 'Customer name is required.'; return; }
     if (!blockTime && payload.services.length === 0) { errEl.textContent = 'Please choose at least one service.'; return; }
+    if (payload.askDeposit && !payload.phone) { errEl.textContent = 'A phone number is needed to text the deposit link.'; return; }
     let r;
     if (editingId) {
       r = await fetch('/api/bookings/' + editingId, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) });
