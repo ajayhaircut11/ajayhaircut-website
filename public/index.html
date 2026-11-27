@@ -308,7 +308,8 @@
         <label for="notes">Notes (optional)</label>
         <textarea id="notes" rows="2" placeholder="Anything we should know?"></textarea>
         <p style="color:var(--gold);font-size:14px;font-weight:600;text-align:center;margin:18px 0 16px;">Your booking confirmation will be sent by email.</p>
-        <button class="btn" type="submit" style="width:100%;padding:16px;">Confirm Booking</button>
+        <p id="depositNote" style="display:none;color:var(--gold);font-size:14px;font-weight:600;text-align:center;margin:-4px 0 16px;">💳 Perm bookings need a $20 deposit — you'll pay securely by card, Apple Pay or Google Pay on the next step. It's fully refunded if you cancel 6 or more hours before your appointment.</p>
+        <button class="btn" id="confirmBtn" type="submit" style="width:100%;padding:16px;">Confirm Booking</button>
         <div class="msg" id="formMsg"></div>
       </form>
       <div id="thanksPanel" style="display:none;text-align:center;padding:30px 6px;">
@@ -425,7 +426,15 @@
   });
 
   const SVC_DUR = { 'Haircut & Beard': 45, 'Head Massage': 15, 'Beard Trim and Threading': 30, "Men's Haircut": 30, 'Beard Trim': 15, 'Face Scrub': 15, 'Hair Perm': 30, 'Beard Perm': 30, "Men's Facial": 45 };
-  document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); }));
+  // Perm bookings carry a $20 deposit: when one is selected, show the note
+  // and rename the button so the payment step is never a surprise.
+  const PERM_SVCS = ['Beard Perm', 'Hair Perm'];
+  function syncDepositNote() {
+    const need = [...document.querySelectorAll('#svcBox input:checked')].some(i => PERM_SVCS.includes(i.value));
+    document.getElementById('depositNote').style.display = need ? '' : 'none';
+    document.getElementById('confirmBtn').textContent = need ? 'Continue to Deposit →' : 'Confirm Booking';
+  }
+  document.querySelectorAll('#svcBox input').forEach(i => i.addEventListener('change', () => { if (daySlots.length) renderSlots(); syncDepositNote(); }));
   // Returning customers: name/phone/email are saved on their own device
   // after a booking and prefilled next time, so they don't retype them.
   function prefillCustomer() {
@@ -438,6 +447,42 @@
     } catch (e) {}
   }
   prefillCustomer();
+
+  // Returning from the Stripe deposit page: ask the server how it ended.
+  // Paid → show the thanks panel with the deposit line. Backed out → the
+  // slot has been released and we say so, so the customer can rebook.
+  (async () => {
+    const q = new URLSearchParams(location.search);
+    const dep = q.get('deposit'), sid = q.get('session_id');
+    if (!dep || !sid) return;
+    history.replaceState({}, '', location.pathname + '#book');
+    try {
+      const r = await fetch('/api/deposit/status?session_id=' + encodeURIComponent(sid) + (dep === 'cancelled' ? '&release=1' : ''));
+      const data = await r.json();
+      if (!r.ok) return;
+      const b = data.booking || {};
+      if (dep === 'success' && data.status === 'booked') {
+        const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const first = String(b.name || '').split(' ')[0];
+        document.getElementById('thanksTitle').textContent = 'Thanks for booking' + (first ? ', ' + first : '') + '!';
+        const niceDate = new Date(b.date + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        const row = (k, v) => '<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 2px;border-bottom:1px solid #26262c;"><span style="color:var(--muted);">' + k + '</span><b style="text-align:right;">' + v + '</b></div>';
+        document.getElementById('thanksSummary').innerHTML =
+          row('Service', esc(b.service)) + row('Date', esc(niceDate)) + row('Time', esc(b.time)) + row('Deposit paid', '$20 ✅');
+        document.getElementById('bookForm').style.display = 'none';
+        const tp = document.getElementById('thanksPanel');
+        tp.style.display = 'block';
+        tp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (dep === 'success') {
+        msgEl.textContent = 'Your payment is being confirmed — your confirmation email will arrive in a few minutes. Questions? Call (778) 344-2550.';
+        document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
+      } else {
+        msgEl.textContent = 'Deposit not paid — your booking was not completed and the time has been released. You can book again below.';
+        msgEl.classList.add('err');
+        document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
+      }
+    } catch (e) {}
+  })();
 
   document.getElementById('bookForm').addEventListener('submit', async (e) => {
     e.preventDefault(); msgEl.textContent = ''; msgEl.className = 'msg';
@@ -455,6 +500,14 @@
     };
     const r = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await r.json();
+    if (r.ok && data.depositRequired && data.checkoutUrl) {
+      // Perm booking: off to Stripe for the $20 deposit. The booking is
+      // confirmed (and the confirmation email sent) once it's paid.
+      try { localStorage.setItem('ajCustomer', JSON.stringify({ name: payload.name, phone: payload.phone, email: payload.email })); } catch (e) {}
+      msgEl.textContent = 'Taking you to the secure payment page…';
+      window.location.href = data.checkoutUrl;
+      return;
+    }
     if (r.ok) {
       try { localStorage.setItem('ajCustomer', JSON.stringify({ name: payload.name, phone: payload.phone, email: payload.email })); } catch (e) {}
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -482,6 +535,7 @@
     f.reset(); f.style.display = '';
     prefillCustomer();
     document.querySelectorAll('#svcBox input').forEach(i => { i.checked = false; });
+    syncDepositNote();
     selectedTime = null;
     loadedDate = null;
     daySlots = []; daySpans = [];
@@ -501,6 +555,7 @@
     btn.addEventListener('click', () => {
       const name = btn.getAttribute('data-service');
       document.querySelectorAll('#svcBox input').forEach(i => { i.checked = i.value === name; });
+      if (window.syncDepositNote) syncDepositNote();
       document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
     });
   });
