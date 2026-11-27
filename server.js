@@ -253,18 +253,13 @@ async function checkDeposits() {
 // in the exact format the owner asked for. Runs every 5 minutes while the
 // service is awake; each booking is reminded at most once.
 const SHOP_TZ = 'America/Vancouver';
-// Vancouver offset from UTC, computed from the DST rules directly (second
-// Sunday of March 2:00 AM -> first Sunday of November 2:00 AM = PDT, UTC-7;
-// otherwise PST, UTC-8) so it never depends on the host's timezone database.
+// Vancouver's offset from UTC. British Columbia adopted a permanent time
+// zone (Pacific Time, UTC-7 all year) and stopped changing its clocks on
+// Nov 1, 2026 — so the offset is always 7 hours now. (This used to follow
+// the old DST rules; those went stale when BC made the change, which also
+// made the 2-hour reminders fire an hour late until this was fixed.)
 function vancouverOffsetMs(y, mo, da, mins) {
-  const nthSunday = (yy, mm, n) => { const first = new Date(Date.UTC(yy, mm - 1, 1)).getUTCDay(); return 1 + ((7 - first) % 7) + (n - 1) * 7; };
-  const startDay = nthSunday(y, 3, 2), endDay = nthSunday(y, 11, 1);
-  let dst;
-  if (mo < 3 || mo > 11) dst = false;
-  else if (mo > 3 && mo < 11) dst = true;
-  else if (mo === 3) dst = da > startDay || (da === startDay && mins >= 120);
-  else dst = da < endDay || (da === endDay && mins < 120);
-  return (dst ? 7 : 8) * 60 * 60 * 1000;
+  return 7 * 60 * 60 * 1000;
 }
 function shopInstant(dateStr, timeStr) {
   const [y, mo, da] = String(dateStr).split('-').map(Number);
