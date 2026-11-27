@@ -143,9 +143,11 @@ function sendBookingTexts(b, authed) {
 }
 
 // ---------- Booking deposits (Stripe) ----------
-// Online bookings that include a perm service need a $20 deposit, paid by
+// Bookings that include a perm service need a $20 deposit, paid by
 // card (Apple Pay / Google Pay included) through Stripe Checkout before
-// the booking is confirmed. Rules set by the owner 2026-11-27: $20, perm
+// the booking is confirmed. Online bookings always ask; dashboard
+// bookings ask only when the owner ticks the option, and then the
+// payment link is texted to the customer. Rules set by the owner 2026-11-27: $20, perm
 // services only, and the deposit is refunded automatically when the
 // booking is cancelled 6 or more hours before the appointment; inside
 // 6 hours it is kept. Set STRIPE_SECRET_KEY in the environment to enable
@@ -188,9 +190,18 @@ async function createDepositSession(booking) {
   if (booking.email) params.customer_email = booking.email;
   return stripeApi('POST', 'checkout/sessions', params);
 }
+// Texts the customer the Stripe payment link for a dashboard-made perm
+// booking (the dashboard has no email field, so the link goes by text).
+// The booking stays 'pending' until the deposit is paid.
+function sendDepositLink(b, checkoutUrl) {
+  if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || !b.phone) return;
+  sendSms(normalizePhone(b.phone),
+    'Hi ' + b.name + ', your appointment at Ajay Haircut is reserved:\n\uD83D\uDCC5 Date: ' + b.date + '\n\u23F0 Time: ' + b.time + '\nService: ' + b.service + '\nTo confirm it, please pay the $20 booking deposit here: ' + checkoutUrl + '\nIt is fully refunded if you cancel 6 or more hours before your appointment. This link expires in 30 minutes.\nUnit 102, 9385 120 St, Delta, BC. Questions? Call (778) 344-2550.' + (hasBeardPerm(b) ? '' : ' Book online: ajayhaircut.com.') + ' Please do not reply to this text.');
+}
 // Marks a pending booking confirmed once Stripe says the deposit is paid,
-// then sends the usual confirmation + owner emails (online rules). Safe to
-// call more than once — it only acts on a still-pending booking.
+// then sends the usual confirmations for the booking's source (online:
+// customer + owner emails; dashboard: customer text, owner nothing).
+// Safe to call more than once — it only acts on a still-pending booking.
 function confirmDepositPaid(list, booking, session) {
   if (booking.status !== 'pending' || booking.depositStatus !== 'pending') return false;
   booking.status = 'booked';
@@ -198,7 +209,8 @@ function confirmDepositPaid(list, booking, session) {
   if (session && session.payment_intent) booking.depositPaymentIntent = session.payment_intent;
   booking.depositPaidAt = new Date().toISOString();
   saveBookings(list);
-  sendBookingEmails(booking, false);
+  if (booking.source === 'dashboard') { sendBookingEmails(booking, true); sendBookingTexts(booking, true); }
+  else sendBookingEmails(booking, false);
   console.log('Deposit paid, booking confirmed:', booking.id);
   return true;
 }
@@ -666,6 +678,9 @@ const server = http.createServer(async (req, res) => {
     // Online customers cannot book a time that has already passed today
     // (shop time). Dashboard bookings are the owner's own and stay flexible.
     if (!authed) { const sn = shopNow(); if (date === sn.date && slotMinutes(time) <= sn.minutes) return sendJson(res, 400, { error: 'That time has already passed. Please pick a later time.' }); }
+    // A dashboard perm booking can ask the customer for the deposit by text
+    // link — that needs a phone number to send the link to.
+    if (authed && b.askDeposit === true && needsDeposit(svcList) && !normalizePhone(phone)) return sendJson(res, 400, { error: 'A phone number is needed to text the deposit link.' });
     const d = new Date(date + 'T12:00:00');
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
     if (loadBlocked().includes(date)) return sendJson(res, 400, { error: 'We are closed on this day. Please pick another day.' });
@@ -686,12 +701,14 @@ const server = http.createServer(async (req, res) => {
       source: authed ? 'dashboard' : 'online', smsConsent: authed ? !!b.smsConsent : true, status: 'booked', createdAt: new Date().toISOString(),
     };
     bookings.push(booking);
-    // Perm bookings made online wait for their $20 Stripe deposit before
-    // they are confirmed: the booking is saved as 'pending' (holding its
-    // slot for 30 minutes) and no emails go out until the deposit is paid.
-    // If Stripe cannot be reached, the booking is confirmed without a
-    // deposit rather than lost.
-    if (!authed && !b.blockTime && depositEnabled() && needsDeposit(svcList)) {
+    // Perm bookings wait for their $20 Stripe deposit before they are
+    // confirmed: the booking is saved as 'pending' (holding its slot for
+    // 30 minutes) and no confirmations go out until the deposit is paid.
+    // Online bookings always ask; dashboard bookings ask only when the
+    // owner ticked the deposit option, and then the payment link is
+    // texted to the customer. If Stripe cannot be reached, the booking
+    // is confirmed without a deposit rather than lost.
+    if (!b.blockTime && depositEnabled() && needsDeposit(svcList) && (!authed || b.askDeposit === true)) {
       booking.status = 'pending';
       booking.depositStatus = 'pending';
       booking.depositAmount = DEPOSIT_CENTS;
@@ -700,6 +717,7 @@ const server = http.createServer(async (req, res) => {
         const session = await createDepositSession(booking);
         booking.depositSessionId = session.id;
         saveBookings(bookings);
+        if (authed) { sendDepositLink(booking, session.url); return sendJson(res, 201, { ok: true, depositLinkSent: true, booking }); }
         return sendJson(res, 201, { ok: true, depositRequired: true, checkoutUrl: session.url, booking });
       } catch (e) {
         console.error('Deposit session failed — confirming without deposit:', e.message);
