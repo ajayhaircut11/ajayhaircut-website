@@ -298,7 +298,7 @@
     const td = document.createElement('td');
     td.className = 'acts';
     const mk = (label, cls, fn) => { const btn = document.createElement('button'); btn.className = 'actbtn ' + cls; btn.textContent = label; btn.onclick = fn; td.appendChild(btn); };
-    if (b.status === 'booked') {
+    if (b.status === 'booked' || b.status === 'pending') {
       mk('Edit', 'edit', () => openModal(b));
       mk('Cancel', 'cancel', () => { if (confirm('Cancel this booking?')) setStatus(b.id, 'cancelled'); });
     } else {
@@ -327,12 +327,18 @@
       else if (b.source === 'dashboard') parts.push('Self');
       if (parts.length) bookedLine = '<div class="tbooked">' + parts.join(' · ') + '</div>';
     }
-    const tag = b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : b.status === 'completed' ? '<span class="tag">Completed</span>' : '';
+    const tag = b.status === 'cancelled' ? '<span class="tag">Cancelled</span>' : b.status === 'completed' ? '<span class="tag">Completed</span>' : b.status === 'pending' ? '<span class="tag">Pending</span>' : '';
+    let depositLine = '';
+    if (b.depositStatus === 'pending') depositLine = '<div style="color:#e0a63f;font-size:13px;">⏳ Waiting for $20 deposit</div>';
+    else if (b.depositStatus === 'paid') depositLine = '<div style="color:#7bc47f;font-size:13px;">💰 Deposit $20 paid</div>';
+    else if (b.depositStatus === 'refunded') depositLine = '<div style="font-size:13px;">Deposit $20 refunded</div>';
+    else if (b.depositStatus === 'kept') depositLine = '<div style="font-size:13px;">Deposit $20 kept (late cancel)</div>';
+    else if (b.depositStatus === 'expired') depositLine = '<div style="font-size:13px;">Deposit not paid — expired</div>';
     const nameHtml = b.blockedSlot
       ? '<span style="color:var(--red);font-weight:700;">Blocked</span>'
       : esc(b.name) + tag;
     tr.innerHTML = '<td><div class="ttime">' + esc(b.time) + '</div>' + dur + '</td>' +
-      '<td>' + nameHtml + note + bookedLine + '</td>' +
+      '<td>' + nameHtml + note + bookedLine + depositLine + '</td>' +
       '<td>' + (b.blockedSlot ? '—' : esc(b.service)) + '</td>' +
       '<td>' + (b.phone ? '<a class="calllink" href="tel:' + telHref(b.phone) + '">\uD83D\uDCDE ' + esc(b.phone) + '</a>' : 'N/A') + '</td>';
     tr.appendChild(actionCell(b));
@@ -343,7 +349,7 @@
     const d = new Date(selected + 'T12:00:00');
     document.getElementById('dayTitle').textContent = DAYS[d.getDay()] + ', ' + MON3[d.getMonth()] + ' ' + d.getDate();
     const byTime = (a, b) => slotMinutes(a.time) - slotMinutes(b.time);
-    const main = bookings.filter(b => b.date === selected && b.status === 'booked').sort(byTime);
+    const main = bookings.filter(b => b.date === selected && (b.status === 'booked' || b.status === 'pending')).sort(byTime);
     const completed = bookings.filter(b => b.date === selected && b.status === 'completed').sort(byTime);
     const cancelled = bookings.filter(b => b.date === selected && b.status === 'cancelled').sort(byTime);
     const n = activeOn(selected).length;
@@ -436,7 +442,7 @@
     const box = document.getElementById('fChips');
     box.innerHTML = '';
     const spans = [];
-    bookings.filter(b => b.date === dateVal && b.status === 'booked' && b.id !== editingId).forEach(b => {
+    bookings.filter(b => b.date === dateVal && (b.status === 'booked' || b.status === 'pending') && b.id !== editingId).forEach(b => {
       const start = slotMinutes(b.time);
       const dur = b.blockedSlot ? (b.blockMinutes || 15) : (Array.isArray(b.services) && b.services.length ? b.services : [b.service]).reduce((s2, sv) => s2 + (durations[sv] || 30), 0);
       spans.push([start, start + dur]);
