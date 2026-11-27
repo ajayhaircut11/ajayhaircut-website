@@ -271,6 +271,17 @@ function shopInstant(dateStr, timeStr) {
   const mins = slotMinutes(timeStr);
   return Date.UTC(y, mo - 1, da, Math.floor(mins / 60), mins % 60) + vancouverOffsetMs(y, mo, da, mins);
 }
+// The current date and minute-of-day at the shop (Vancouver), from the same
+// DST rules — used to hide and reject time slots that have already passed.
+function shopNow() {
+  const now = new Date();
+  let off = vancouverOffsetMs(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(), now.getUTCHours() * 60 + now.getUTCMinutes());
+  let local = new Date(now.getTime() - off);
+  off = vancouverOffsetMs(local.getUTCFullYear(), local.getUTCMonth() + 1, local.getUTCDate(), local.getUTCHours() * 60 + local.getUTCMinutes());
+  local = new Date(now.getTime() - off);
+  const date = local.getUTCFullYear() + '-' + String(local.getUTCMonth() + 1).padStart(2, '0') + '-' + String(local.getUTCDate()).padStart(2, '0');
+  return { date, minutes: local.getUTCHours() * 60 + local.getUTCMinutes() };
+}
 let reminderCheckRunning = false;
 // Cancellation notices: online customers are emailed, dashboard customers
 // are texted. If the preferred channel is unavailable, the other is used so
@@ -581,7 +592,8 @@ const server = http.createServer(async (req, res) => {
     const spans = loadBookings()
       .filter(b => b.date === date && (b.status === 'booked' || b.status === 'pending'))
       .map(b => { const s = bookingSpan(b); return { start: s.start, end: s.end }; });
-    return sendJson(res, 200, { date, slots: allSlots(), taken, spans, blocked: loadBlocked().includes(date) });
+    const sn = shopNow();
+    return sendJson(res, 200, { date, slots: allSlots(), taken, spans, blocked: loadBlocked().includes(date), today: sn.date, nowMinutes: sn.minutes });
   }
 
   // Stripe calls this when a checkout finishes or expires. The raw body is
@@ -656,6 +668,9 @@ const server = http.createServer(async (req, res) => {
       if (!email) return sendJson(res, 400, { error: 'An email address is required for your booking confirmation.' });
     }
     if (!allSlots().includes(time)) return sendJson(res, 400, { error: 'That time is not bookable.' });
+    // Online customers cannot book a time that has already passed today
+    // (shop time). Dashboard bookings are the owner's own and stay flexible.
+    if (!authed) { const sn = shopNow(); if (date === sn.date && slotMinutes(time) <= sn.minutes) return sendJson(res, 400, { error: 'That time has already passed. Please pick a later time.' }); }
     const d = new Date(date + 'T12:00:00');
     if (d.getDay() === 2) return sendJson(res, 400, { error: 'We are closed on Tuesdays.' });
     if (loadBlocked().includes(date)) return sendJson(res, 400, { error: 'We are closed on this day. Please pick another day.' });
